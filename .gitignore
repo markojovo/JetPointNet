@@ -1,0 +1,6 @@
+
+# ignore data files. Must manually configure
+pnet_data/*
+
+# ignore containers. These are not tracked here
+containers/*

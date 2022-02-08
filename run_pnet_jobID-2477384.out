@@ -1,0 +1,52 @@
+SETTING UP POINT NET TRAINING ENVIRONMENT
+
+SLURM_TMPDIR
+/localscratch/russbate.2477384.0
+slurm job number
+2477384
+
+current directory: 
+/localscratch/russbate.2477384.0
+
+training data directory
+total 2.0G
+drwxr-x---. 2 russbate russbate    4 Feb  8 00:35 .
+drwxr-x---. 6 russbate russbate    6 Feb  8 00:35 ..
+-rw-r-----. 1 russbate russbate 5.6G Feb  8 00:35 XR_norm.npy
+-rw-r-----. 1 russbate russbate 2.8G Feb  8 00:35 YR_segm_norm.npy
+
+executables and python scripts
+total 3.0K
+drwxr-x---. 2 russbate russbate    6 Feb  8 00:35 .
+drwxr-x---. 6 russbate russbate    6 Feb  8 00:35 ..
+-rw-r-----. 1 russbate russbate  11K Feb  8 00:35 deep_set_util.py
+-rw-r-----. 1 russbate russbate   22 Feb  8 00:35 helloworld_python.py
+-rw-r-----. 1 russbate russbate  17K Feb  8 00:35 pnet_models.py
+-rw-r-----. 1 russbate russbate 3.8K Feb  8 00:35 pnet_train_loop.py
+
+container
+total 6.7G
+-rwxr-x---. 1 russbate russbate 6.7G Feb  8 00:35 baseml_tf_v0.1.37.sif
+
+NVIDIA
+Tue Feb  8 00:35:37 2022       
++-----------------------------------------------------------------------------+
+| NVIDIA-SMI 470.82.01    Driver Version: 470.82.01    CUDA Version: 11.4     |
+|-------------------------------+----------------------+----------------------+
+| GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+|                               |                      |               MIG M. |
+|===============================+======================+======================|
+|   0  NVIDIA A100-SXM...  Off  | 00000000:01:00.0 Off |                    0 |
+| N/A   30C    P0    51W / 400W |      0MiB / 40536MiB |      0%      Default |
+|                               |                      |             Disabled |
++-------------------------------+----------------------+----------------------+
+                                                                               
++-----------------------------------------------------------------------------+
+| Processes:                                                                  |
+|  GPU   GI   CI        PID   Type   Process name                  GPU Memory |
+|        ID   ID                                                   Usage      |
+|=============================================================================|
+|  No running processes found                                                 |
++-----------------------------------------------------------------------------+
+

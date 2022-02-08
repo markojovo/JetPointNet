@@ -1,0 +1,4 @@
+  File "scripts/pnet_train_loop.py", line 85
+    del Xbatch
+    ^
+SyntaxError: invalid syntax
