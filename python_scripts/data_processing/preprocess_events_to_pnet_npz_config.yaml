@@ -1,0 +1,10 @@
+pion_dir: /fast_scratch_1/jbohm/train_testing_data/pion_files
+pipm1_file_nums: [11]
+pipm2_file_nums: [12]
+pi0_file_nums: [13]
+save_dir: /fast_scratch_1/jbohm/train_testing_data/
+len_file: 6000
+i_low: 51
+i_high: 199
+num_procs: 2
+energy_threshold: 0
