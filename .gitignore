@@ -4,3 +4,6 @@ pnet_data/*
 
 # ignore containers. These are not tracked here
 containers/*
+
+# ignore pred files
+pi0*

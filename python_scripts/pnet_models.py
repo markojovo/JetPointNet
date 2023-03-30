@@ -42,8 +42,8 @@ def mat_mult(tensors):
 def cast_to_zero(tensors):
     ''' casts all values that should be zero to zero in the modified tensor '''
     mod_input, input_tens = tensors
-    full_mask = tf.logical_not(tf.math.equal(input_tens, 0.))
-    reduced_mask = tf.experimental.numpy.any(full_mask, axis=-1)
+    full_mask = tf.logical_not(tf.math.equal(input_tens, -1)) # find where all X values are equal to 0
+    reduced_mask = tf.experimental.numpy.any(full_mask, axis=-1) # mask if all input feat are 0
     reduced_mask = tf.cast(reduced_mask, dtype=tf.float32)
     reduced_mask = tf.expand_dims(reduced_mask, axis=-1)
     return_tens = tf.math.multiply(mod_input, reduced_mask)
@@ -51,7 +51,7 @@ def cast_to_zero(tensors):
 
 def tdist_block(x, mask, size: int, number: str):
     dense = layers.Dense(size)
-    x = layers.TimeDistributed(dense, name='t_dist_'+number)(x, mask=mask)
+    x = layers.TimeDistributed(dense, name='t_dist_'+number)(x)#, mask=mask) #TODO: add in masking again
     x = layers.BatchNormalization(momentum=0.0, name='batchNorm_'+number)(x) # added
     x = layers.Activation('relu', name='activation_'+number)(x)
     return x
@@ -269,7 +269,7 @@ def PointNet_omicron(shape=(100,4), name=None):
 def PointNet_gamma(shape=(100,4), name=None):
     inputs = keras.Input(shape=shape, name="input")
 
-    mask_tens = layers.Masking(mask_value=0.0, input_shape=shape)(inputs)
+    mask_tens = layers.Masking(mask_value=-1, input_shape=shape)(inputs)
     keras_mask = mask_tens._keras_mask
 
     #============= T-NET ====================================================#
@@ -288,6 +288,7 @@ def PointNet_gamma(shape=(100,4), name=None):
         shape[-1]*shape[-1],
         kernel_initializer='zeros',
         bias_initializer=keras.initializers.Constant(np.eye(shape[-1]).flatten()),
+        #activity_regularizer=OrthogonalRegularizer(shape[-1]),
         name='pre_matrix_0'
     )(mlp_tnet_1)
     
@@ -313,12 +314,13 @@ def PointNet_gamma(shape=(100,4), name=None):
     
     max_pool_1 = layers.MaxPool1D(pool_size=shape[-2], name='tnet_1_MaxPool')(block_7_masked)
     mlp_tnet_2 = layers.Dense(200, activation='relu', name='tnet_1_dense_0')(max_pool_1)
-    mlp_tnet_3 = layers.Dense(200, activation='relu', name='tnet_1_dense_1')(mlp_tnet_2)
+    mlp_tnet_3 = layers.Dense(200, activation='relu', name='tnet_1_dense_1')(mlp_tnet_2) # TODO: does this have to be 32x32??
     
     vector_dense_1 = layers.Dense(
         1024,
         kernel_initializer='zeros',
         bias_initializer=keras.initializers.Constant(np.eye(32).flatten()),
+        #activity_regularizer=OrthogonalRegularizer(32),
         name='pre_matrix_1'
     )(mlp_tnet_3)
     
@@ -333,17 +335,23 @@ def PointNet_gamma(shape=(100,4), name=None):
     block_9 = tdist_block(block_8, mask=keras_mask, size=200, number='9')
     block_10 = tdist_block(block_9, mask=keras_mask, size=300, number='10')
     
-    block_10_masked = layers.Lambda(cast_to_zero, name='block_10_masked')(
-    [block_10, inputs]
-    )
+    block_10_masked = layers.Lambda(cast_to_zero, name='block_10_masked')([block_10, inputs])
     
     max_pool_2 = layers.MaxPool1D(pool_size=shape[-2], name='global_maxpool')(block_10_masked)
     #========================================================================#
 
     max_pool_block = layers.Lambda(repeat_for_points, name='mp_block')([max_pool_2, inputs])
     
-    block_11 = layers.Concatenate(axis=-1, name='concatenation')([max_pool_block, mod_features_1])
-    
+    block_11 = layers.Concatenate(axis=-1, name='concatenation')(#[max_pool_block, mod_features_1])
+        [
+            mod_inputs_0,
+            block_3,
+            block_4,
+            mod_features_1,
+            block_8,
+            block_9,
+            max_pool_block
+        ])
     
     block_12 = tdist_block(block_11, mask=keras_mask, size=332, number='12')
     dropout_0 = layers.Dropout(rate=.2)(block_12)
@@ -355,7 +363,7 @@ def PointNet_gamma(shape=(100,4), name=None):
     dropout_3 = layers.Dropout(rate=.2)(block_15)
     
     last_dense = layers.Dense(1)
-    last_time = layers.TimeDistributed(last_dense, name='last_tdist')(dropout_3, mask=keras_mask)
+    last_time = layers.TimeDistributed(last_dense, name='last_tdist')(dropout_3)#, mask=keras_mask)
     last_act = layers.Activation('sigmoid', name="last_act")(last_time)
 
     return keras.Model(inputs=inputs, outputs=last_act, name=name)
@@ -366,6 +374,8 @@ def PointNet_gamma(shape=(100,4), name=None):
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+# Part segmentation models
+
 # https://keras.io/examples/vision/pointnet_segmentation/
 def conv_block(x: tf.Tensor, filters: int, name: str) -> tf.Tensor:
     x = layers.Conv1D(filters, kernel_size=1, padding="valid", name=f"{name}_conv")(x)
@@ -374,7 +384,7 @@ def conv_block(x: tf.Tensor, filters: int, name: str) -> tf.Tensor:
 
 def time_dist_block(x: tf.Tensor, mask, size: int, name: str) -> tf.Tensor:
     dense = layers.Dense(size)
-    x = layers.TimeDistributed(dense, name=f"{name}_conv")(x, mask=mask)
+    x = layers.TimeDistributed(dense, name=f"{name}_conv")(x)#, mask=mask)
     x = layers.BatchNormalization(momentum=0.0, name=f"{name}_batch_norm")(x)
     return layers.Activation("relu", name=f"{name}_relu")(x)
 
@@ -462,7 +472,7 @@ def transformation_block(inputs: tf.Tensor, num_features: int, name: str) -> tf.
     )
     return layers.Dot(axes=(2, 1), name=f"{name}_mm")([inputs, transformed_features])
 
-def segmentation_model(num_points: int, num_classes: int) -> keras.Model:
+def part_segmentation_model(num_points: int, num_classes: int) -> keras.Model:
     input_points = keras.Input(shape=(None, 4))
 
     # PointNet Classification Network.
@@ -503,7 +513,7 @@ def segmentation_model(num_points: int, num_classes: int) -> keras.Model:
     return keras.Model(input_points, outputs)
 
 
-def segmentation_model_propagate_mask(num_points: int, num_classes: int) -> keras.Model:
+def part_segmentation_model_propagate_mask(num_points: int, num_classes: int) -> keras.Model:
     input_points = keras.Input(shape=(None, 4))
 
     # add mask layer
