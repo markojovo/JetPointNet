@@ -27,6 +27,17 @@ def spherical_to_cartesian(rs, thetas, phis):
 
     return x,y,z
 
+def spherical_to_cartesian_cor(rs, phis, thetas):
+    # convert to x, y, z
+    x, y, z = [], [], []
+
+    for i, r in enumerate(rs):
+        x.append(r*np.cos(phis[i]))
+        y.append(r*np.sin(phis[i]))
+        z.append( r/np.tan(thetas[i]))
+
+    return x,y,z
+
 def process_file(args):
     file_name, pion_dir, save_dir, node_feature_names, file_features, cell_geo_data, sorter, energy_threshold, group_events, max_points_queue = args
     print(file_name)
@@ -81,7 +92,7 @@ def process_file(args):
 
             # get cartesian coords
             thetas = [2*np.arctan(np.exp(-eta)) for eta in node_features["cell_geo_eta"]]
-            x, y, z = spherical_to_cartesian(node_features["cell_geo_rPerp"], node_features["cell_geo_phi"], thetas)
+            x, y, z = spherical_to_cartesian_cor(node_features["cell_geo_rPerp"], node_features["cell_geo_phi"], thetas)
 
             # if grouped by events extend the set of event points with the clusters points
             if group_events and num_cells != 0:
@@ -113,15 +124,15 @@ def process_file(args):
                     max_cells = num_cells
                 num_cells = 0
             
-        if group_events:
+        if group_events and num_cells > 0:
             if num_cells > max_cells:
                 max_cells = num_cells   
             num_cells = 0
             samples_count += 1
 
     for file_type in file_features:
-        point_data = np.negative(np.ones((samples_count, max_cells, len(file_features[file_type]))))
-        point_label = np.negative(np.ones((samples_count, max_cells, 1)))
+        point_data = np.zeros((samples_count, max_cells, len(file_features[file_type]))) # PAD zeros !!
+        point_label = np.zeros((samples_count, max_cells, 1))
 
         for idx in range(samples_count):
             len_cluster = len(processed_event_data["cell_geo_eta"][idx])
@@ -165,7 +176,7 @@ if __name__ == "__main__":
 
     file_features = {
         #'pion_pointnet_spherical': ['cluster_cell_E', *(node_feature_names[1:4])],
-        'charged_pion_pointnet_cartesian': ['cluster_cell_E', 'x', 'y', 'z'],
+        'pion_pointnet_cartesian': ['cluster_cell_E', 'x', 'y', 'z'],
         #'pion_pointnet_lawrence': ['cluster_cell_E', *node_feature_names]
     }
 
@@ -176,8 +187,8 @@ if __name__ == "__main__":
     # get list of paths to pion files to convert
     pion_files = []
     for j, pi0_num in enumerate(pi0_file_nums):
-        #pion_files.extend(list(map(lambda i:  "/pi0_" + str(pi0_num) + "_pipm_" + str(pipm1_file_nums[j]) + "_" + str(pipm2_file_nums[j]) + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))
-        pion_files.extend(list(map(lambda i:  "/pipm_" + str(pipm1_file_nums[j]) + "_" + str(pipm2_file_nums[j]) + "_" + str(pi0_num)  + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))
+        pion_files.extend(list(map(lambda i:  "/pi0_" + str(pi0_num) + "_pipm_" + str(pipm1_file_nums[j]) + "_" + str(pipm2_file_nums[j]) + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))
+        #pion_files.extend(list(map(lambda i:  "/pipm_" + str(pipm1_file_nums[j]) + "_" + str(pipm2_file_nums[j]) + "_" + str(pi0_num)  + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))
     
     max_points = 0
 
@@ -193,7 +204,7 @@ if __name__ == "__main__":
         if q_max_points > max_points:
             max_points = q_max_points
 
-    with open(save_dir + 'charged_pion_pointnet_cartesian/max_points.txt') as f:
+    with open(save_dir + 'pion_pointnet_cartesian/max_points.txt') as f:
         current_max_points = int(f.readline())
     
     if max_points > current_max_points:

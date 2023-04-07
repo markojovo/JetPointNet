@@ -1,22 +1,40 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "4"
 
 ## Configuration
 #======================================
 train_charged = False
+pad_0 = False
+no_tnets = False
 
 if train_charged:
     data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_3'
     model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_3/gamma_charged_325_tr_40_tst_38_val_BN_cartesian_stacked_output_weight_points_equal' 
-    save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_0_cartesian_preds_train_charged.npy'
+    save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_preds_train_charged.npy'
+elif pad_0:
+    data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2'
+    model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/gamma_325_tr_40_tst_40_val_BN_cartesian_stacked_output_weight_points_equal_zero_pad' 
+    save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_preds_pad_zero_11_epoch.npy'
+elif no_tnets:
+    data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2'
+    model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/gamma_325_tr_40_tst_40_val_BN_cartesian_stacked_output_weight_points_equal_zero_pad_no_tnet' 
+    save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_preds_pad_zero_no_tnets_11_epoch.npy'
 else:
     data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2'
     model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/gamma_325_tr_40_tst_40_val_10_epoch_BN_cartesian_stacked_output_weight_points_equal' 
-    save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_0_cartesian_preds_train_mixed.npy'
+    save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_preds_pad_neg_one_11_epoch.npy'
 
-test_files = ['/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/train2/pi0_14_pipm_13_14_len_6000_i_0_cartesian.npz']
-save_labels_file = None
-load_epoch = 6
+# get pion file names
+pi0_file_num = 14
+pipm1_file_num = 13
+pipm2_file_num = 14
+len_file = 6000
+i_low = 10
+i_high = 15
+test_files = ["/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/train2/pi0_" + str(pi0_file_num) + "_pipm_" + str(pipm1_file_num) + "_" + str(pipm2_file_num) + "_len_" + str(len_file) + "_i_" + str(i) + "_cartesian.npz" for i in range(i_low, i_high + 1)]
+
+save_labels_file = None#'/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_labels.npy'
+load_epoch = 10 # start at 0
 
 BATCH_SIZE = 64
 LEARNING_RATE = 1e-2
@@ -35,7 +53,7 @@ import csv
 
 ## local ML Packages
 #sys.path.append(module_path)
-from pnet_models import part_segmentation_model, part_segmentation_model_propagate_mask, PointNet_omicron, PointNet_delta, PointNet_gamma
+from pnet_models import PointNet_gamma_no_tnet, part_segmentation_model, part_segmentation_model_propagate_mask, PointNet_omicron, PointNet_delta, PointNet_gamma
 
 ## TensorFlow
 #======================================
