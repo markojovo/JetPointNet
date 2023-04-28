@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "4"
+os.environ['CUDA_VISIBLE_DEVICES'] = "5"
 
 ## Configuration
 #======================================
@@ -24,19 +24,25 @@ else:
     model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/gamma_325_tr_40_tst_40_val_10_epoch_BN_cartesian_stacked_output_weight_points_equal' 
     save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_preds_pad_neg_one_11_epoch.npy'
 
-# get pion file names
-pi0_file_num = 14
-pipm1_file_num = 13
-pipm2_file_num = 14
-len_file = 6000
-i_low = 10
-i_high = 15
-test_files = ["/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/train2/pi0_" + str(pi0_file_num) + "_pipm_" + str(pipm1_file_num) + "_" + str(pipm2_file_num) + "_len_" + str(len_file) + "_i_" + str(i) + "_cartesian.npz" for i in range(i_low, i_high + 1)]
+data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify'
+model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_tr_329_val_66_tst_5_dropout'
 
-save_labels_file = None#'/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_labels.npy'
+# get pion file names
+pi0_file_num = 13
+pipm1_file_num = 11
+pipm2_file_num = 12
+len_file = 6000
+i_low = 60
+i_high = 64
+test_files = ["/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/test/pi0_" + str(pi0_file_num) + "_pipm_" + str(pipm1_file_num) + "_" + str(pipm2_file_num) + "_len_" + str(len_file) + "_i_" + str(i) + "_cartesian_2_classes.npz" for i in range(i_low, i_high + 1)]
+#test_files = ["/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/train2/pi0_" + str(pi0_file_num) + "_pipm_" + str(pipm1_file_num) + "_" + str(pipm2_file_num) + "_len_" + str(len_file) + "_i_" + str(i) + "_cartesian.npz" for i in range(i_low, i_high + 1)]
+
 load_epoch = 10 # start at 0
 
-BATCH_SIZE = 64
+save_preds_file = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_tr_329_val_66_tst_5_dropout/tests/preds_' + str(load_epoch) + '.npy'
+save_labels_file = None#'/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_tr_329_val_66_tst_5_dropout/tests/labels.npy'
+
+BATCH_SIZE = 150
 LEARNING_RATE = 1e-2
 
 
@@ -53,7 +59,7 @@ import csv
 
 ## local ML Packages
 #sys.path.append(module_path)
-from pnet_models import PointNet_gamma_no_tnet, part_segmentation_model, part_segmentation_model_propagate_mask, PointNet_omicron, PointNet_delta, PointNet_gamma
+from pnet_models_updated import pnet_part_seg_no_tnets, PointNet_gamma_no_tnet, part_segmentation_model, part_segmentation_model_propagate_mask, PointNet_omicron, PointNet_delta, PointNet_gamma
 
 ## TensorFlow
 #======================================
@@ -102,22 +108,30 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
 with open(data_dir + '/max_points.txt') as f:
     N = int(f.readline())
 
+# LOSS
+def masked_bce_pointwise_loss(y_true, y_pred):
+    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
+    return K.sum(K.binary_crossentropy(tf.multiply(y_pred, mask),
+                tf.multiply(y_true, mask)), axis=None) / K.sum(mask, axis=None)
+
 
 ## Compile Model
 #======================================
-pnet = PointNet_gamma(shape=(N, 4),
-    name='PointNet_gamma')
+#pnet = PointNet_gamma(shape=(N, 4),
+#    name='PointNet_gamma')
 
+model = pnet_part_seg_no_tnets(N)
+model.compile(loss=masked_bce_pointwise_loss, optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE))
 
-pnet.compile(loss="mse", optimizer=keras.optimizers.Adam(
-    learning_rate=LEARNING_RATE))
+#pnet.compile(loss="mse", optimizer=keras.optimizers.Adam(
+#    learning_rate=LEARNING_RATE))
 
-pnet.summary()
+#pnet.summary()
 print()
 print()
 
 # if resuming training load saved weights
-pnet.load_weights(model_dir + "/weights/weights_" + str(load_epoch) + ".h5")
+model.load_weights(model_dir + "/weights/weights_" + str(load_epoch) + ".h5")
 
 
 # GET PREDS
@@ -125,7 +139,7 @@ test_generator_one_file = batched_data_generator(test_files, BATCH_SIZE, N, loop
 predictions = []
 labels = []
 for X_test, Y_test in test_generator_one_file:
-    predictions.extend(pnet.predict(X_test))
+    predictions.extend(model.predict(X_test))
     labels.extend(Y_test)
 
 np.save(save_preds_file, predictions)

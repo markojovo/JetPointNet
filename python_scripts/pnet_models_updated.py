@@ -42,7 +42,7 @@ def mat_mult(tensors):
 def cast_to_zero(tensors):
     ''' casts all values that should be zero to zero in the modified tensor '''
     mod_input, input_tens = tensors
-    full_mask = tf.logical_not(tf.math.equal(input_tens, -1)) # find where all X values are equal to 0
+    full_mask = tf.logical_not(tf.math.equal(input_tens, 0)) # find where all X values are equal to 0
     reduced_mask = tf.experimental.numpy.any(full_mask, axis=-1) # mask if all input feat are 0
     reduced_mask = tf.cast(reduced_mask, dtype=tf.float32)
     reduced_mask = tf.expand_dims(reduced_mask, axis=-1)
@@ -608,6 +608,66 @@ def part_segmentation_model_propagate_mask(num_points: int, num_classes: int) ->
     
 
     last_dense = layers.Dense(num_classes)
+    last_time = layers.TimeDistributed(last_dense, name='last_tdist')(segmentation_features)
+    outputs = layers.Activation('sigmoid', name="last_act")(last_time)
+
+    return keras.Model(input_points, outputs)
+
+#============================================================================#
+##======================== CLASSIFICATION MODELS ===========================##
+#============================================================================#
+
+def t_dist_block(x: tf.Tensor, size: int, name: str) -> tf.Tensor:
+    dense = layers.Dense(size)
+    x = layers.TimeDistributed(dense, name=f"{name}_tdist")(x)
+    return layers.Activation("relu", name=f"{name}_relu")(x)
+
+def t_dist_block_mask(x: tf.Tensor, size: int, name: str, mask):
+    dense = layers.Dense(size)
+    x = layers.TimeDistributed(dense, name=f"{name}_tdist")(x, mask)
+    return layers.Activation("relu", name=f"{name}_relu")(x)
+
+def pnet_part_seg_no_tnets(num_points: int) -> keras.Model:
+    input_points = keras.Input(shape=(None, 4))
+
+    features_64 = t_dist_block(input_points, 64, name="features_64")
+    features_128_1 = t_dist_block(features_64, 128, name="features_128_1")
+    features_128_2 = t_dist_block(features_128_1, 128, name="features_128_2")
+
+    features_512 = t_dist_block(features_128_2, 512, name="features_512")
+    features_2048 = t_dist_block(features_512, 2048, name="pre_maxpool_block")
+
+    # cast masked inputs to 0
+    features_2048_masked = layers.Lambda(cast_to_zero, name='pre_maxpool_block_masked')([features_2048, input_points])
+    
+    global_features = layers.MaxPool1D(pool_size=num_points, name="global_features")(
+        features_2048_masked
+    )
+    global_features = tf.tile(global_features, [1, num_points, 1])
+
+    # Segmentation head.
+    segmentation_input = layers.Concatenate(name="segmentation_input")(
+        [
+            features_64,
+            features_128_1,
+            features_128_2,
+            features_512,
+            global_features,
+        ]
+    )
+
+    segmentation_features = t_dist_block(segmentation_input, 128, name="segmentation_features")
+    
+    # add extra t-dist and dropout layers
+    """
+    segmentation_features_256_1 = t_dist_block(segmentation_input, 256, 'segmentation_features_256_1')
+    dropout_0 = layers.Dropout(rate=.2)(segmentation_features_256_1)
+    segmentation_features_256_2 = t_dist_block(dropout_0, 256, 'segmentation_features_256_2')
+    dropout_1 = layers.Dropout(rate=.2)(segmentation_features_256_2)
+    segmentation_features_128 = t_dist_block(dropout_1,  128, name="segmentation_features_128")
+    dropout_2 = layers.Dropout(rate=.2)(segmentation_features_128)
+    """
+    last_dense = layers.Dense(1)
     last_time = layers.TimeDistributed(last_dense, name='last_tdist')(segmentation_features)
     outputs = layers.Activation('sigmoid', name="last_act")(last_time)
 

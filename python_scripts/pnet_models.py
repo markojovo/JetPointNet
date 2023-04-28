@@ -66,6 +66,50 @@ def tdist_batchNorm(x, mask, size: int, number: str):
 #============================================================================#
 ##=============================== MODELS ===================================##
 #============================================================================#
+def PointNet_delta_no_tnets(shape=(None,4), name=None):
+    inputs = keras.Input(shape=shape, name="input")
+
+    mask_tens = layers.Masking(mask_value=0.0, input_shape=shape)(inputs)
+    keras_mask = mask_tens._keras_mask
+    
+    
+    #=============== UPSCALE TO NEW FEATURE SPACE ===========================#
+    block_3 = tdist_block(inputs, mask=keras_mask, size=16, number='3')
+    block_4 = tdist_block(block_3, mask=keras_mask, size=16, number='4')
+    #========================================================================#
+    
+    
+    #================ MLP + MAXPOOL BLOCK ===================================#
+    block_8 = tdist_block(block_4, mask=keras_mask, size=64, number='8')
+    block_9 = tdist_block(block_8, mask=keras_mask, size=128, number='9')
+    block_10 = tdist_block(block_9, mask=keras_mask, size=256, number='10')
+    
+    block_10_masked = layers.Lambda(cast_to_zero, name='block_10_masked')(
+    [block_10, inputs]
+    )
+    
+    max_pool_2 = layers.MaxPool1D(pool_size=shape[-2], name='global_maxpool')(block_10_masked)
+    #========================================================================#
+
+    max_pool_block = layers.Lambda(repeat_for_points, name='mp_block')([max_pool_2, inputs])
+    
+    block_11 = layers.Concatenate(axis=-1, name='concatenation')([max_pool_block, block_4])
+    
+    
+    block_12 = tdist_block(block_11, mask=keras_mask, size=272, number='12')
+    dropout_0 = layers.Dropout(rate=.2)(block_12)
+    block_13 = tdist_block(dropout_0, mask=keras_mask, size=272, number='13')
+    dropout_1 = layers.Dropout(rate=.2)(block_13)
+    block_14 = tdist_block(dropout_1, mask=keras_mask, size=128, number='14')
+    dropout_2 = layers.Dropout(rate=.2)(block_14)
+    block_15 = tdist_block(dropout_2, mask=keras_mask, size=64, number='15')
+    dropout_3 = layers.Dropout(rate=.2)(block_15)
+    
+    last_dense = layers.Dense(1)
+    last_time = layers.TimeDistributed(last_dense, name='last_tdist')(dropout_3, mask=keras_mask)
+    last_act = layers.Activation('sigmoid', name="last_act")(last_time)
+
+    return keras.Model(inputs=inputs, outputs=last_act, name=name)
 
 def PointNet_delta(shape=(None,4), name=None):
     inputs = keras.Input(shape=shape, name="input")

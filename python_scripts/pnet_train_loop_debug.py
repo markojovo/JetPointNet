@@ -12,18 +12,21 @@ print('CUDA Environment Info')
 ## Configuration
 #======================================
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "4"
 
-data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2'
-output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/delta_grouped_25_tr_5_val_1_tst_cartesian_cor'
-num_train_files = 26
-num_val_files = 5
-num_test_files = 1
+data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_4'
+output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_4/beta_N_1053'
+num_train_files = 50
+num_val_files = 10
+num_test_files = 5
 events_per_file = 4000 # approx since it varries
+# ~2600 for low EM
+# ~9300 for clusters
+# ~4000 for events
 start_at_epoch = 0
 
 EPOCHS = 5
-BATCH_SIZE = 200
+BATCH_SIZE = 400
 LEARNING_RATE = 1e-2
 
 
@@ -51,6 +54,7 @@ from pnet_models import PointNet_gamma, PointNet_delta
 #======================================
 import tensorflow as tf
 from tensorflow import keras
+import keras.backend as K
 
 ## IMPORTANT ## ====== ## DISABLE EAGER EXECUTION WITH TensorFlow!! ##
 print()
@@ -63,7 +67,7 @@ print("TensorFlow version {}".format(tf.__version__))
 print("Keras version {}".format(keras.__version__))
 print()
 
-"""
+
 ## Load Data
 #======================================
 
@@ -73,22 +77,17 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
             point_net_data = np.load(file)
             cluster_data = point_net_data['X']
             Y = point_net_data['Y']
+            #print("len file:", cluster_data.shape)
 
             # pad X data to have y dimension of max_num_points
             X_padded = np.zeros((cluster_data.shape[0], max_num_points, cluster_data.shape[2])) # pad X data with 0's instead of -1's to have less influence on BN stats??
-            Y_padded = np.zeros(((cluster_data.shape[0], max_num_points, 1)))
+            Y_padded = np.negative(np.ones(((cluster_data.shape[0], max_num_points, 1))))
             for i, cluster in enumerate(cluster_data):
-                X_padded[i, :len(cluster[:, 1][cluster[:, 1] != 0]), 1] = cluster[:, 1][cluster[:, 1] != 0]
-                X_padded[i, :len(cluster[:, 2][cluster[:, 2] != 0]), 2] = cluster[:, 2][cluster[:, 2] != 0]
-                X_padded[i, :len(cluster[:, 3][cluster[:, 3] != 0]), 3] = cluster[:, 3][cluster[:, 3] != 0]
-                X_padded[i, :len(cluster[:, 0][cluster[:, 0] != 0]), 0] = np.log10(cluster[:, 0][cluster[:, 0] != 0]) + 1 # scale by log(energy) - mean(log(energy))
-                Y_padded[i, :len(Y[i][Y[i] != 0]), 0] = Y[i][Y[i] != 0]
-            
-            #print("X_padded shape:", X_padded.shape)
-            #print("Y_padded shape:", Y_padded.shape)
-
-            #print("X data:", X_padded[1000, 40:43, :])
-            #print("Y data:", Y_padded[1000, 40:43, :])
+                # temp splice num cells at N = 1053
+                if len(cluster) > max_num_points:
+                    cluster = cluster[:max_num_points]
+                X_padded[i, :len(cluster), :] = cluster
+                Y_padded[i, :len(cluster), :] = Y[i][:max_num_points]
 
             # split into batch_size groups of clusters
             for i in range(1, math.ceil(cluster_data.shape[0]/batch_size)):
@@ -99,9 +98,9 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
 ## Set Up Data generators
 #======================================
 
-train_output_dir = data_dir + '/train_events_cor/'
-val_output_dir = data_dir + '/val_events_cor/'
-test_output_dir = data_dir + '/test_events_cor/'
+train_output_dir = data_dir + '/train/'
+val_output_dir = data_dir + '/val/'
+test_output_dir = data_dir + '/test/'
 
 train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
 val_files = np.sort(glob.glob(val_output_dir+'*.npz'))[:num_val_files]
@@ -116,41 +115,34 @@ num_batches_test = (len(test_files) * events_per_file) / BATCH_SIZE
 with open(data_dir + '/max_points.txt') as f:
     N = int(f.readline())
 
-# hardcode N
-#N = 1053
+# temp hardcode N
+N = 1053
 
-train_generator = batched_data_generator(train_files, BATCH_SIZE, N)
-val_generator = batched_data_generator(val_files, BATCH_SIZE, N)
+train_generator = batched_data_generator(train_files, BATCH_SIZE, N)#, loop_infinite=False)
+val_generator = batched_data_generator(val_files, BATCH_SIZE, N)#, loop_infinite=False)
 test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False)
 
+## make continuous dataset
 """
+X_train = np.empty((0, N, 4))
+Y_train = np.empty((0, N, 1))
+for X, Y in train_generator:
+    X_train = np.append(X_train, X, axis=0)
+    Y_train = np.append(Y_train, Y, axis=0)
 
-## load dataset
-# load the max number of points (N) - saved to data dir
-with open(data_dir + '/max_points.txt') as f:
-    N = int(f.readline())
-
-# first load just one file
-train_output_dir = data_dir + '/train_events_cor/'
-train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
-file_names = train_files
-for file in file_names:
-    point_net_data = np.load(file)
-    cluster_data = point_net_data['X']
-    Y = point_net_data['Y']
-
-    # pad X data to have y dimension of max_num_points
-    X_padded = np.zeros((cluster_data.shape[0], N, cluster_data.shape[2])) # pad X data with 0's instead of -1's to have less influence on BN stats??
-    Y_padded = np.zeros(((cluster_data.shape[0], N, 1)))
-    for i, cluster in enumerate(cluster_data):
-        X_padded[i, :len(cluster[:, 1][cluster[:, 1] != 0]), 1] = cluster[:, 1][cluster[:, 1] != 0]
-        X_padded[i, :len(cluster[:, 2][cluster[:, 2] != 0]), 2] = cluster[:, 2][cluster[:, 2] != 0]
-        X_padded[i, :len(cluster[:, 3][cluster[:, 3] != 0]), 3] = cluster[:, 3][cluster[:, 3] != 0]
-        X_padded[i, :len(cluster[:, 0][cluster[:, 0] != 0]), 0] = np.log10(cluster[:, 0][cluster[:, 0] != 0]) + 1 # scale by log(energy) - mean(log(energy))
-        Y_padded[i, :len(Y[i][Y[i] != 0]), 0] = Y[i][Y[i] != 0]
-
+X_val = np.empty((0, N, 4))
+Y_val = np.empty((0, N, 1))
+for X, Y in val_generator:
+    X_val = np.append(X_val, X, axis=0)
+    Y_val = np.append(Y_val, Y, axis=0)
+"""
 ## Compile Model
 #======================================
+
+# LOSS
+def masked_mae_pointwise_loss(y_true, y_pred):
+    return K.abs(y_true[y_true != -1] - y_pred[y_true != -1]) # taking cut flattens the data giving pointwise ae to be averages over on reduction
+
 pnet = PointNet_delta(shape=(N, 4),
     name='PointNet_delta')
 
@@ -176,7 +168,7 @@ if not os.path.exists(output_dir + "/weights"):
 if not os.path.exists(output_dir + "/tests"):
     os.makedirs(output_dir + "/tests")
 
-"""
+
 # save loss after each batch
 batch_end_loss = list()
 class SaveBatchLoss(tf.keras.callbacks.Callback):
@@ -194,10 +186,10 @@ class SaveEpoch(tf.keras.callbacks.Callback):
         for X_test, Y_test in per_epoch_test_generator:
             predictions.extend(pnet.predict(X_test))
             labels.extend(Y_test)
-        np.save(output_dir + "/tests/preds_5_files_" + str(start_at_epoch + epoch) + ".npy", predictions)
+        np.save(output_dir + "/tests/preds_" + str(start_at_epoch + epoch) + ".npy", predictions)
         if epoch == 0:
             # save the labels for 5 test files
-            np.save(output_dir + "/tests/labels_5_files.npy", labels)
+            np.save(output_dir + "/tests/labels.npy", labels)
 
         # save model weights
         pnet.save_weights(output_dir + "/weights/weights_" + str(start_at_epoch + epoch) + ".h5")
@@ -205,12 +197,12 @@ class SaveEpoch(tf.keras.callbacks.Callback):
         with open(output_dir + "/log_loss.csv" ,'a') as file:
             writer = csv.writer(file)
             writer.writerow([start_at_epoch + epoch , logs["loss"], logs["val_loss"]])
-"""
+
 
 
 ## Train Model
 #======================================
-"""
+
 t0 = cput()
 history = pnet.fit(train_generator,
         epochs=EPOCHS,
@@ -221,13 +213,15 @@ history = pnet.fit(train_generator,
         callbacks=[SaveBatchLoss(), SaveEpoch()])
 t1 = cput()
 """
-
 t0 = cput()
-history = pnet.fit(x=X_padded, y=Y_padded,
+history = pnet.fit(x=X_train, y=Y_train,
                            epochs=EPOCHS,
                            batch_size=BATCH_SIZE,
-                           verbose=1)
+                           validation_data=(X_val, Y_val),
+                           verbose=1,
+                           callbacks=[SaveBatchLoss(), SaveEpoch()])
 t1 = cput()
+"""
 
 print()
 print()

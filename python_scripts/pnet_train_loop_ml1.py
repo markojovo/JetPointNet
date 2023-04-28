@@ -11,23 +11,23 @@ eidited by: Jessica Bohm
 j2bohm@uwaterloo.ca
 '''
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "4"
 
 ## Configuration
 #======================================
 
 data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2'
-output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/gamma_100_tr_5_tst_15_val_cor_cartesian_stacked_output_weight_points_equal_log_E_round_mean'
+output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/gamma_325_tr_40_tst_5_val_cor_cartesian_stacked_output_weight_points_equal_log_E_round_mean_no_BN'
 #output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_3/gamma_charged_325_tr_40_tst_38_val_BN_cartesian_stacked_output_weight_points_equal' 
-num_train_files = 100
-num_val_files = 15
+num_train_files = 325
+num_val_files = 40
 num_test_files = 5
 #test_file = data_dir + "/val/pi0_14_pipm_13_14_len_6000_i_10_cartesian.npz"
 clusters_per_file = 9000 # approx since it varries
 start_at_epoch = 0
 
-EPOCHS = 5
-BATCH_SIZE = 64
+EPOCHS = 10
+BATCH_SIZE = 200
 LEARNING_RATE = 1e-2
 
 
@@ -48,7 +48,7 @@ import sys
 #sys.path.append(module_path)
 import deep_set_util as dsu
 import pnet_models
-from pnet_models import PointNet_gamma_no_tnet, part_segmentation_model, part_segmentation_model_propagate_mask, PointNet_omicron, PointNet_delta, PointNet_gamma
+from pnet_models_updated import PointNet_gamma_no_tnet, part_segmentation_model, part_segmentation_model_propagate_mask, PointNet_omicron, PointNet_delta, PointNet_gamma
 
 ## TensorFlow
 #======================================
@@ -110,7 +110,7 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
 
 train_output_dir = data_dir + '/train2/'
 val_output_dir = data_dir + '/val2/'
-test_output_dir = data_dir + '/test/'
+test_output_dir = data_dir + '/test2/'
 
 train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
 val_files = np.sort(glob.glob(val_output_dir+'*.npz'))[:num_val_files]
@@ -124,6 +124,7 @@ num_batches_test = (len(test_files) * clusters_per_file) / BATCH_SIZE
 # load the max number of points (N) - saved to data dir
 with open(data_dir + '/max_points.txt') as f:
     N = int(f.readline())
+N = 935
 
 train_generator = batched_data_generator(train_files, BATCH_SIZE, N)
 val_generator = batched_data_generator(val_files, BATCH_SIZE, N)
@@ -133,7 +134,7 @@ test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite
 ## Compile Model
 #======================================
 
-pnet = PointNet_gamma_no_tnet(shape=(N, 4), # 7 feat w lawrence data
+pnet = PointNet_gamma(shape=(N, 4), # 7 feat w lawrence data
     name='PointNet_gamma')
 
 #pnet = part_segmentation_model_propagate_mask(N, 1)

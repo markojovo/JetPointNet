@@ -8,7 +8,8 @@ import awkward as ak
 import multiprocessing
 
 sys.path.append('/home/jbohm/start_tf/LCStudies')
-from  util import graph_util as gu
+
+LOG_ENERGY_MEAN = -1 # unrounded mean is ~ 0.93
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -16,7 +17,7 @@ def get_args():
     return parser.parse_args()
 
 # by generic definition of spherical to cartesian coord conversion
-def spherical_to_cartesian(rs, thetas, phis):
+def spherical_to_cartesian_prev_wrong(rs, thetas, phis):
     # convert to x, y, z
     x, y, z = [], [], []
 
@@ -27,7 +28,7 @@ def spherical_to_cartesian(rs, thetas, phis):
 
     return x,y,z
 
-def spherical_to_cartesian_cor(rs, phis, thetas):
+def spherical_to_cartesian(rs, phis, thetas):
     # convert to x, y, z
     x, y, z = [], [], []
 
@@ -39,7 +40,7 @@ def spherical_to_cartesian_cor(rs, phis, thetas):
     return x,y,z
 
 def process_file(args):
-    file_name, pion_dir, save_dir, node_feature_names, file_features, cell_geo_data, sorter, energy_threshold, group_events, max_points_queue = args
+    file_name, pion_dir, save_dir, node_feature_names, file_features, cell_geo_data, sorter, energy_threshold, group_events, max_points_queue, mixed_pions = args
     print(file_name)
     event_data = np.load(pion_dir + file_name, allow_pickle=True).item()
     num_events = len(event_data["eventNumber"])
@@ -82,8 +83,11 @@ def process_file(args):
             # get truth energy fraction EM/EM + nonEM for each cell
             truth_EM_frac = cell_hits_E_EM[threshold_E] / cell_hits_E[threshold_E]
 
+            # classify truth_EM_frac
+            truth_EM_frac = [0 if truth_EM_frac_i <= 0.94810295 else 1 for truth_EM_frac_i in truth_EM_frac] # YES it is classifying the data !!! jus not naming the files - classify
+
             # get cluster cell energy
-            cluster_cell_E = event_data["cluster_cell_E"][event_idx][cluster_idx][threshold_E]
+            cluster_cell_E = np.log10(event_data["cluster_cell_E"][event_idx][cluster_idx][threshold_E]) - LOG_ENERGY_MEAN
 
             # node features
             node_features = {}
@@ -92,7 +96,7 @@ def process_file(args):
 
             # get cartesian coords
             thetas = [2*np.arctan(np.exp(-eta)) for eta in node_features["cell_geo_eta"]]
-            x, y, z = spherical_to_cartesian_cor(node_features["cell_geo_rPerp"], node_features["cell_geo_phi"], thetas)
+            x, y, z = spherical_to_cartesian(node_features["cell_geo_rPerp"], node_features["cell_geo_phi"], thetas)
 
             # if grouped by events extend the set of event points with the clusters points
             if group_events and num_cells != 0:
@@ -126,13 +130,13 @@ def process_file(args):
             
         if group_events and num_cells > 0:
             if num_cells > max_cells:
-                max_cells = num_cells   
-            num_cells = 0
+                max_cells = num_cells
             samples_count += 1
+            num_cells = 0
 
     for file_type in file_features:
-        point_data = np.zeros((samples_count, max_cells, len(file_features[file_type]))) # PAD zeros !!
-        point_label = np.zeros((samples_count, max_cells, 1))
+        point_data = np.zeros((samples_count, max_cells, len(file_features[file_type]))) # pad X data with 0's
+        point_label = np.negative(np.ones((samples_count, max_cells, 1))) # pad Y data with -1's, since some EM fracs are 0
 
         for idx in range(samples_count):
             len_cluster = len(processed_event_data["cell_geo_eta"][idx])
@@ -143,7 +147,7 @@ def process_file(args):
             point_data[idx, :len_cluster] = np.transpose(cluster_point_data)
             point_label[idx, :len_cluster] = np.transpose([processed_event_data["truth_EM_frac"][idx]])
 
-        file_path = save_dir + file_type + file_name.split(".")[0] + "_" + "_".join(file_type.split("_")[2:]) + ('_event_grouped' if group_events else '') + '.npz'
+        file_path = save_dir + file_type + file_name.split(".")[0] + "_" + "_".join(file_type.split("_")[2:]) + ('_event_grouped' if group_events else '') + ('_charged' if not mixed_pions else '') + '.npz'
         np.savez(file_path, X=point_data, Y=point_label)
 
     max_points_queue.put(max_cells)
@@ -156,7 +160,6 @@ if __name__ == "__main__":
     config_file = "./preprocess_events_to_pnet_npz_config.yaml"
     config = yaml.load(open(config_file), Loader=yaml.FullLoader)
 
-    pion_dir = config["pion_dir"]
     save_dir = config["save_dir"]
     pi0_file_nums = config["pi0_file_nums"]
     pipm1_file_nums = config["pipm1_file_nums"]
@@ -167,6 +170,9 @@ if __name__ == "__main__":
     num_procs = config["num_procs"]
     energy_threshold = config["energy_threshold"]
     group_events = config["group_events"]
+    mixed_pions = config["mixed_pions"]
+
+    pion_dir = "/fast_scratch_1/jbohm/train_testing_data/" + ("pion_files" if mixed_pions else "charged_pion_files")
 
     # load cell geo tree dict
     file = uproot.open("/data/atlas/data/rho_delta/rho_small.root")
@@ -187,8 +193,10 @@ if __name__ == "__main__":
     # get list of paths to pion files to convert
     pion_files = []
     for j, pi0_num in enumerate(pi0_file_nums):
-        pion_files.extend(list(map(lambda i:  "/pi0_" + str(pi0_num) + "_pipm_" + str(pipm1_file_nums[j]) + "_" + str(pipm2_file_nums[j]) + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))
-        #pion_files.extend(list(map(lambda i:  "/pipm_" + str(pipm1_file_nums[j]) + "_" + str(pipm2_file_nums[j]) + "_" + str(pi0_num)  + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))
+        if mixed_pions:
+            pion_files.extend(list(map(lambda i:  "/pi0_" + str(pi0_num) + "_pipm_" + str(pipm1_file_nums[j]) + "_" + str(pipm2_file_nums[j]) + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))
+        else: # charged pion files
+            pion_files.extend(list(map(lambda i:  "/pipm_" + str(pipm1_file_nums[j]) + "_" + str(pipm2_file_nums[j]) + "_" + str(pi0_num)  + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))
     
     max_points = 0
 
@@ -196,7 +204,7 @@ if __name__ == "__main__":
     max_points_queue = manager.Queue()
     pool = multiprocessing.Pool(num_procs)
 
-    pool.map(process_file, [(file_name, pion_dir, save_dir, node_feature_names, file_features, cell_geo_data, sorter, energy_threshold, group_events, max_points_queue) for file_name in pion_files])
+    pool.map(process_file, [(file_name, pion_dir, save_dir, node_feature_names, file_features, cell_geo_data, sorter, energy_threshold, group_events, max_points_queue, mixed_pions) for file_name in pion_files])
 
     while not max_points_queue.empty():
         q_max_points = max_points_queue.get()

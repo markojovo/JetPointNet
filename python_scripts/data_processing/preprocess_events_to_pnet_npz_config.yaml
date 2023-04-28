@@ -1,11 +1,11 @@
-pion_dir: /fast_scratch_1/jbohm/train_testing_data/pion_files
 pipm1_file_nums: [13]
 pipm2_file_nums: [14]
 pi0_file_nums: [14]
 save_dir: /fast_scratch_1/jbohm/train_testing_data/
 len_file: 6000
 i_low: 0
-i_high: 60
+i_high: 199
 num_procs: 32
 energy_threshold: 0
 group_events: True
+mixed_pions: True
