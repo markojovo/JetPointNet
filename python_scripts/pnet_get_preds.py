@@ -1,46 +1,25 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "5"
+os.environ['CUDA_VISIBLE_DEVICES'] = "3"
 
 ## Configuration
 #======================================
-train_charged = False
-pad_0 = False
-no_tnets = False
-
-if train_charged:
-    data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_3'
-    model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_3/gamma_charged_325_tr_40_tst_38_val_BN_cartesian_stacked_output_weight_points_equal' 
-    save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_preds_train_charged.npy'
-elif pad_0:
-    data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2'
-    model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/gamma_325_tr_40_tst_40_val_BN_cartesian_stacked_output_weight_points_equal_zero_pad' 
-    save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_preds_pad_zero_11_epoch.npy'
-elif no_tnets:
-    data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2'
-    model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/gamma_325_tr_40_tst_40_val_BN_cartesian_stacked_output_weight_points_equal_zero_pad_no_tnet' 
-    save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_preds_pad_zero_no_tnets_11_epoch.npy'
-else:
-    data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2'
-    model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/gamma_325_tr_40_tst_40_val_10_epoch_BN_cartesian_stacked_output_weight_points_equal' 
-    save_preds_file = '/home/jbohm/start_tf/PointNet_Segmentation/nbs/pi0_14_pipm_13_14_len_6000_i_10_to_15_cartesian_preds_pad_neg_one_11_epoch.npy'
-
 data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify'
-model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_tr_329_val_66_tst_5_dropout'
+model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_charged_events_thresh_0.787_tr_312_val_78_tst_10_lr_1e-2' # best charged trained so far
+#model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_events_tr_472_val_118_tst_10_lr_1e-6' # best mixed trained so far
 
-# get pion file names
 pi0_file_num = 13
 pipm1_file_num = 11
 pipm2_file_num = 12
 len_file = 6000
-i_low = 60
-i_high = 64
-test_files = ["/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/test/pi0_" + str(pi0_file_num) + "_pipm_" + str(pipm1_file_num) + "_" + str(pipm2_file_num) + "_len_" + str(len_file) + "_i_" + str(i) + "_cartesian_2_classes.npz" for i in range(i_low, i_high + 1)]
-#test_files = ["/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/train2/pi0_" + str(pi0_file_num) + "_pipm_" + str(pipm1_file_num) + "_" + str(pipm2_file_num) + "_len_" + str(len_file) + "_i_" + str(i) + "_cartesian.npz" for i in range(i_low, i_high + 1)]
+i_low = 0
+i_high = 9
 
-load_epoch = 10 # start at 0
+pion_file_dir = "/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/test_mixed_thresh_0.787/"
+test_files = [pion_file_dir + "pi0_" + str(pi0_file_num) + "_pipm_" + str(pipm1_file_num) + "_" + str(pipm2_file_num) + "_len_" + str(len_file) + "_i_" + str(i) + "_cartesian_event_grouped.npz" for i in range(i_low, i_high + 1)]
+load_epoch = 8 # start at 0
 
-save_preds_file = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_tr_329_val_66_tst_5_dropout/tests/preds_' + str(load_epoch) + '.npy'
-save_labels_file = None#'/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_tr_329_val_66_tst_5_dropout/tests/labels.npy'
+save_preds_file = model_dir + "/tests/mixed_preds_" + str(load_epoch) + ".npy"
+save_labels_file = None #model_dir + "/tests/mixed_labels.npy"
 
 BATCH_SIZE = 150
 LEARNING_RATE = 1e-2

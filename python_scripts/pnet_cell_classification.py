@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "4" # GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = "2" # GPU
 import tensorflow as tf
 from tensorflow import keras
 from keras import layers
@@ -19,19 +19,25 @@ print()
 
 
 # LOSS
-def masked_bce_pointwise_loss(y_true, y_pred):
+def masked_bce_weighted_pointwise_loss(y_true, y_pred):
+    weights = tf.expand_dims(y_true[:,:,1], -1)
+    y_true = tf.expand_dims(y_true[:,:,0], -1)
     mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
-    return K.sum(K.binary_crossentropy(tf.multiply(y_pred, mask),
-                tf.multiply(y_true, mask)), axis=None) / K.sum(mask, axis=None)
+    return K.sum(tf.multiply(tf.multiply(weights, mask), K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask))), axis=None) / K.sum(mask, axis=None)
+
+def masked_bce_pointwise_loss(y_true, y_pred):
+    y_true = tf.expand_dims(y_true[:,:,0], -1)
+    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
+    return K.sum(K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask)), axis=None) / K.sum(mask, axis=None)
 
 # DATA AND OUTPUT DIRS
 data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify'
-output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_events_tr_472_val_118_tst_10_lr_1e-6'
-num_train_files = 472
-num_val_files = 118
+output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_charged_events_thresh_0.787_tr_312_val_78_tst_10_lr_1e-2'
+num_train_files = 312
+num_val_files = 78
 num_test_files = 10
 events_per_file = 6000
-start_at_epoch = 6
+start_at_epoch = 2 # load start_at_epoch - 1
 
 EPOCHS = 100
 BATCH_SIZE = 100
@@ -47,10 +53,10 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
 
             # pad X data to have y dimension of max_num_points
             X_padded = np.zeros((cluster_data.shape[0], max_num_points, cluster_data.shape[2])) # pad X data with 0's instead of -1's to have less influence on BN stats??
-            Y_padded = np.negative(np.ones(((cluster_data.shape[0], max_num_points, 1))))
+            Y_padded = np.negative(np.ones(((cluster_data.shape[0], max_num_points, 1)))) # NOTE: update for weighted cells
             for i, cluster in enumerate(cluster_data):
                 X_padded[i, :len(cluster), :] = cluster
-                Y_padded[i, :len(cluster), :] = Y[i] 
+                Y_padded[i, :len(cluster), :] = Y[i]
 
             # split into batch_size groups of clusters
             for i in range(1, math.ceil(cluster_data.shape[0]/batch_size)):
@@ -100,7 +106,7 @@ if not os.path.exists(output_dir + "/tests"):
 class SaveEpoch(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs={}):
         # save preds on new test file
-        per_epoch_test_generator = batched_data_generator(test_files[:5], BATCH_SIZE, N, loop_infinite=False)
+        per_epoch_test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False)
 
         predictions = []
         labels = []
