@@ -619,7 +619,12 @@ def part_segmentation_model_propagate_mask(num_points: int, num_classes: int) ->
 
 def t_dist_block(x: tf.Tensor, size: int, name: str) -> tf.Tensor:
     dense = layers.Dense(size)
+    #ln = layers.LayerNormalization(name='layerNorm_' + name)
+    bn = layers.BatchNormalization(momentum=0.0, name='batchNorm_' + name)
     x = layers.TimeDistributed(dense, name=f"{name}_tdist")(x)
+    x = layers.TimeDistributed(bn, name=f"{name}_bn_tdist")(x)
+    #x = layers.BatchNormalization(momentum=0.0, name='batchNorm_' + name)(x) # TODO: remove just for a test
+    #x = layers.LayerNormalization(name='layerNorm_' + name)(x) # TODO: remove just for a test
     return layers.Activation("relu", name=f"{name}_relu")(x)
 
 def t_dist_block_mask(x: tf.Tensor, size: int, name: str, mask):

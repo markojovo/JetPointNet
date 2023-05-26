@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "2" # GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = "5" # GPU
 import tensorflow as tf
 from tensorflow import keras
 from keras import layers
@@ -32,16 +32,18 @@ def masked_bce_pointwise_loss(y_true, y_pred):
 
 # DATA AND OUTPUT DIRS
 data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify'
-output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_charged_events_thresh_0.787_tr_312_val_78_tst_10_lr_1e-2'
-num_train_files = 312
-num_val_files = 78
-num_test_files = 10
+#output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_charged_events_thresh_0.787_tr_707_val_210_tst_10_lr_1e-6'
+output_dir = "/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_charged_events_thresh_0.787_tr_312_val_78_tst_10_lr_1e-2_BN_timedist"
+
+num_train_files = 312 #707
+num_val_files = 78 #210
+num_test_files = 10 #10
 events_per_file = 6000
-start_at_epoch = 2 # load start_at_epoch - 1
+start_at_epoch = 13 # load start_at_epoch - 1
 
 EPOCHS = 100
-BATCH_SIZE = 100
-LEARNING_RATE = 1e-6
+BATCH_SIZE = 75
+LEARNING_RATE = 1e-2
 
 # DATA GENERATORS
 def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite=True):
@@ -64,12 +66,46 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
         if not loop_infinite:
             break
 
-train_output_dir = data_dir + '/train/'
-val_output_dir = data_dir + '/val/'
+CUT_ONE_CLASS_EVENTS = 1
+def batched_data_generator_cut(file_names, batch_size, max_num_points, loop_infinite=True):
+    while True:
+        for file in file_names:
+            point_net_data = np.load(file)
+            cluster_data = point_net_data['X']
+            Y = point_net_data['Y']
+            #print("loaded file")
+
+            # pad X data to have y dimension of max_num_points
+            X_padded = []#np.empty((0, max_num_points, cluster_data.shape[2])) # pad X data with 0's instead of -1's to have less influence on BN stats??
+            Y_padded = []#np.empty((0, max_num_points, 1)) # NOTE: update for weighted cells
+            clus_idx = 0
+            for i, cluster in enumerate(cluster_data):
+                frac_em_class = np.sum(Y[i][Y[i] != -1]) / len(Y[i][Y[i] != -1])
+                if max(frac_em_class, 1 - frac_em_class) < CUT_ONE_CLASS_EVENTS:
+                    X_padded.append(np.zeros((max_num_points, cluster_data.shape[2])))
+                    Y_padded.append(np.negative(np.ones((max_num_points, 1))))
+                    X_padded[clus_idx][:cluster.shape[0], :] = cluster
+                    Y_padded[clus_idx][:cluster.shape[0], :] = Y[i]
+                    clus_idx += 1
+            X_padded = np.asarray(X_padded)
+            Y_padded = np.asarray(Y_padded)
+            # split into batch_size groups of clusters
+            for i in range(1, math.ceil(X_padded.shape[0]/batch_size)):
+                yield X_padded[(i-1)*batch_size:i*batch_size], Y_padded[(i-1)*batch_size:i*batch_size]
+        if not loop_infinite:
+            break
+
+train_output_dir = data_dir + '/train_larger/'
+val_output_dir = data_dir + '/val_larger/'
 test_output_dir = data_dir + '/test/'
 
-train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
-val_files = np.sort(glob.glob(val_output_dir+'*.npz'))[:num_val_files]
+# for smaller train read from train_larger
+file_names_path = "/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/train_charged_events_thresh_0.787_tr_312_val_78_tst_10_file_info/"
+train_files = [train_output_dir + file_name for file_name in open(file_names_path + "train_files.txt").read().splitlines()]
+val_files = [val_output_dir + file_name for file_name in open(file_names_path + "val_files.txt").read().splitlines()]
+
+#train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
+#val_files = np.sort(glob.glob(val_output_dir+'*.npz'))[:num_val_files]
 test_files = np.sort(glob.glob(test_output_dir+'*.npz'))[:num_test_files]
 
 num_batches_train = (len(train_files) * events_per_file) / BATCH_SIZE 

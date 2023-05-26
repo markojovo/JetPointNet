@@ -192,8 +192,12 @@ if __name__ == "__main__":
     weight_cells = config["weight_cells"]
     em_frac_threshold = config["em_frac_threshold"]
     rho_events = config["rho_events"]
+    new_format = config["new_format"]
 
-    pion_dir = "/fast_scratch_1/jbohm/train_testing_data/" + ("pion_files" if mixed_pions else "charged_pion_files")
+    if not new_format:
+        pion_dir = "/fast_scratch_1/jbohm/train_testing_data/" + ("pion_files" if mixed_pions else "charged_pion_files")
+    else:
+        pion_dir = "/fast_scratch_1/jbohm/train_testing_data/charged_temp"
 
     # load cell geo tree dict
     file = uproot.open("/data/atlas/data/rho_delta/rho_small.root")
@@ -214,7 +218,9 @@ if __name__ == "__main__":
     # get list of paths to pion files to convert
     pion_files = []
     for j, pi0_num in enumerate(pi0_file_nums):
-        if mixed_pions:
+        if new_format:
+            pion_files.extend(list(map(lambda i:  "/pipm_" + str(pipm1_file_nums[j]) + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))
+        elif mixed_pions:
             pion_files.extend(list(map(lambda i:  "/pi0_" + str(pi0_num) + "_pipm_" + str(pipm1_file_nums[j]) + "_" + str(pipm2_file_nums[j]) + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))
         else: # charged pion files
             pion_files.extend(list(map(lambda i:  "/pipm_" + str(pipm1_file_nums[j]) + "_" + str(pipm2_file_nums[j]) + "_" + str(pi0_num)  + "_len_" + str(len_file) + "_i_" + str(i) + ".npy", np.arange(i_low, i_high + 1))))

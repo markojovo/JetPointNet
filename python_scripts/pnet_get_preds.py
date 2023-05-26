@@ -1,27 +1,38 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "3"
+os.environ['CUDA_VISIBLE_DEVICES'] = "2"
 
 ## Configuration
 #======================================
+mixed = True
+
+if mixed:
+    pi0_file_num = 13
+    pipm1_file_num = 11
+    pipm2_file_num = 12
+    len_file = 6000
+    i_low = 0
+    i_high = 9
+    pion_file_dir = "/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/test_mixed_thresh_0.787/"
+    test_files = [pion_file_dir + "pi0_" + str(pi0_file_num) + "_pipm_" + str(pipm1_file_num) + "_" + str(pipm2_file_num) + "_len_" + str(len_file) + "_i_" + str(i) + "_cartesian_event_grouped.npz" for i in range(i_low, i_high + 1)]
+
+else:
+    pi0_file_num = 16
+    pipm1_file_num = 14
+    pipm2_file_num = 15
+    len_file = 6000
+    i_low = 20
+    i_high = 29
+    pion_file_dir = "/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/test/"
+    test_files = [pion_file_dir + "pipm_" + str(pipm1_file_num) + "_" + str(pipm2_file_num) + "_" + str(pi0_file_num) + "_len_" + str(len_file) + "_i_" + str(i) + "_cartesian_event_grouped_charged.npz" for i in range(i_low, i_high + 1)]
+
 data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify'
-model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_charged_events_thresh_0.787_tr_312_val_78_tst_10_lr_1e-2' # best charged trained so far
-#model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_events_tr_472_val_118_tst_10_lr_1e-6' # best mixed trained so far
-
-pi0_file_num = 13
-pipm1_file_num = 11
-pipm2_file_num = 12
-len_file = 6000
-i_low = 0
-i_high = 9
-
-pion_file_dir = "/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/test_mixed_thresh_0.787/"
-test_files = [pion_file_dir + "pi0_" + str(pi0_file_num) + "_pipm_" + str(pipm1_file_num) + "_" + str(pipm2_file_num) + "_len_" + str(len_file) + "_i_" + str(i) + "_cartesian_event_grouped.npz" for i in range(i_low, i_high + 1)]
-load_epoch = 8 # start at 0
+model_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_charged_events_thresh_0.787_tr_312_val_78_tst_10_lr_1e-2_BN_timedist' # best charged trained so far
+load_epoch = 13 # start at 0
 
 save_preds_file = model_dir + "/tests/mixed_preds_" + str(load_epoch) + ".npy"
-save_labels_file = None #model_dir + "/tests/mixed_labels.npy"
+save_labels_file = model_dir + "/tests/mixed_labels.npy"
 
-BATCH_SIZE = 150
+BATCH_SIZE = 75
 LEARNING_RATE = 1e-2
 
 
@@ -67,6 +78,7 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
             point_net_data = np.load(file)
             cluster_data = point_net_data['X']
             Y = point_net_data['Y']
+            print("loaded file")
 
             # pad X data to have y dimension of max_num_points
             X_padded = np.negative(np.ones((cluster_data.shape[0], max_num_points, cluster_data.shape[2]))) # pad X data with 0's instead of -1's to have less influence on BN stats??
@@ -81,7 +93,34 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
         if not loop_infinite:
             break
 
+CUT_ONE_CLASS_EVENTS = 1
+def batched_data_generator_cut(file_names, batch_size, max_num_points, loop_infinite=True):
+    while True:
+        for file in file_names:
+            point_net_data = np.load(file)
+            cluster_data = point_net_data['X']
+            Y = point_net_data['Y']
+            print("loaded file")
 
+            # pad X data to have y dimension of max_num_points
+            X_padded = []#np.empty((0, max_num_points, cluster_data.shape[2])) # pad X data with 0's instead of -1's to have less influence on BN stats??
+            Y_padded = []#np.empty((0, max_num_points, 1)) # NOTE: update for weighted cells
+            clus_idx = 0
+            for i, cluster in enumerate(cluster_data):
+                frac_em_class = np.sum(Y[i][Y[i] != -1]) / len(Y[i][Y[i] != -1])
+                if max(frac_em_class, 1 - frac_em_class) < CUT_ONE_CLASS_EVENTS:
+                    X_padded.append(np.zeros((max_num_points, cluster_data.shape[2])))
+                    Y_padded.append(np.negative(np.ones((max_num_points, 1))))
+                    X_padded[clus_idx][:cluster.shape[0], :] = cluster
+                    Y_padded[clus_idx][:cluster.shape[0], :] = Y[i]
+                    clus_idx += 1
+            X_padded = np.asarray(X_padded)
+            Y_padded = np.asarray(Y_padded)
+            # split into batch_size groups of clusters
+            for i in range(1, math.ceil(X_padded.shape[0]/batch_size)):
+                yield X_padded[(i-1)*batch_size:i*batch_size], Y_padded[(i-1)*batch_size:i*batch_size]
+        if not loop_infinite:
+            break
 
 # load the max number of points (N) - saved to data dir
 with open(data_dir + '/max_points.txt') as f:
@@ -96,18 +135,12 @@ def masked_bce_pointwise_loss(y_true, y_pred):
 
 ## Compile Model
 #======================================
-#pnet = PointNet_gamma(shape=(N, 4),
-#    name='PointNet_gamma')
-
 model = pnet_part_seg_no_tnets(N)
 model.compile(loss=masked_bce_pointwise_loss, optimizer=keras.optimizers.Adam(learning_rate=LEARNING_RATE))
-
-#pnet.compile(loss="mse", optimizer=keras.optimizers.Adam(
-#    learning_rate=LEARNING_RATE))
-
-#pnet.summary()
+model.summary()
 print()
 print()
+
 
 # if resuming training load saved weights
 model.load_weights(model_dir + "/weights/weights_" + str(load_epoch) + ".h5")
