@@ -4,6 +4,7 @@ import tensorflow as tf
 from tensorflow import keras
 from keras import layers
 from keras import backend as K
+from keras.layers import Layer
 
 
 #============================================================================#
@@ -617,6 +618,33 @@ def part_segmentation_model_propagate_mask(num_points: int, num_classes: int) ->
 ##======================== CLASSIFICATION MODELS ===========================##
 #============================================================================#
 
+# from ChatGPT3
+class MaskedBatchNormalization(Layer):
+    def __init__(self, momentum=0.0, epsilon=1e-3, mask=None, **kwargs):
+        super(MaskedBatchNormalization, self).__init__(**kwargs)
+        self.momentum = momentum
+        self.epsilon = epsilon
+        self.mask = mask
+
+    def build(self, input_shape):
+        self.gamma = self.add_weight(name='gamma', shape=(input_shape[-1],), initializer='ones', trainable=True)
+        self.beta = self.add_weight(name='beta', shape=(input_shape[-1],), initializer='zeros', trainable=True)
+        super(MaskedBatchNormalization, self).build(input_shape)
+
+    def call(self, inputs):
+        masked_inputs = tf.boolean_mask(inputs, mask=self.mask)
+        mean, var = K.mean(masked_inputs, axis=0, keepdims=True), K.var(masked_inputs, axis=0, keepdims=True)
+
+        normalized = (inputs - mean) / K.sqrt(var + self.epsilon)
+        return self.gamma * normalized + self.beta
+
+    def get_config(self):
+        config = super(MaskedBatchNormalization, self).get_config()
+        config.update({'momentum': self.momentum, 'epsilon': self.epsilon})
+        return config
+    
+########
+
 def t_dist_block(x: tf.Tensor, size: int, name: str) -> tf.Tensor:
     dense = layers.Dense(size)
     #ln = layers.LayerNormalization(name='layerNorm_' + name)
@@ -624,7 +652,17 @@ def t_dist_block(x: tf.Tensor, size: int, name: str) -> tf.Tensor:
     x = layers.TimeDistributed(dense, name=f"{name}_tdist")(x)
     x = layers.TimeDistributed(bn, name=f"{name}_bn_tdist")(x)
     #x = layers.BatchNormalization(momentum=0.0, name='batchNorm_' + name)(x) # TODO: remove just for a test
+    #x = MaskedBatchNormalization(name='batchNorm_' + name)(x, mask) # TODO: remove just for a test
     #x = layers.LayerNormalization(name='layerNorm_' + name)(x) # TODO: remove just for a test
+    return layers.Activation("relu", name=f"{name}_relu")(x)
+
+def t_dist_block_masked_bn(x: tf.Tensor, size: int, name: str, mask: tf.Tensor) -> tf.Tensor:
+    dense = layers.Dense(size)
+    #bn = CustomBatchNormalizationMomentum(name='batchNorm_' + name, mask=mask) # for time dist NOTE: update mask to be for each N
+    x = layers.TimeDistributed(dense, name=f"{name}_tdist")(x)
+    #x = layers.TimeDistributed(bn, name=f"{name}_bn_tdist")(x) # for time dist
+    x = MaskedBatchNormalization(name='batchNorm_' + name, mask=mask)(x)
+    #x = layers.BatchNormalization(momentum=0.0, name='batchNorm_' + name)(x)
     return layers.Activation("relu", name=f"{name}_relu")(x)
 
 def t_dist_block_mask(x: tf.Tensor, size: int, name: str, mask):
@@ -632,15 +670,45 @@ def t_dist_block_mask(x: tf.Tensor, size: int, name: str, mask):
     x = layers.TimeDistributed(dense, name=f"{name}_tdist")(x, mask)
     return layers.Activation("relu", name=f"{name}_relu")(x)
 
+def tnet(inputs: tf.Tensor, num_features: int, name: str, input_points, mask: tf.Tensor) -> tf.Tensor:
+    """
+    Reference: https://keras.io/examples/vision/pointnet/#build-a-model.
+
+    The `filters` values come from the original paper:
+    https://arxiv.org/abs/1612.00593.
+    """
+    x = t_dist_block_masked_bn(inputs, 64, f"{name}_1", mask)
+    x = t_dist_block_masked_bn(x, 128, f"{name}_2", mask)
+    x = t_dist_block_masked_bn(x, 1024, f"{name}_3", mask)
+    # cast masked layers to 0
+    x_masked = layers.Lambda(cast_to_zero, name=f"{name}_3_masked")([x, input_points])
+
+    x = layers.GlobalMaxPooling1D()(x_masked)
+    x = mlp_block(x, filters=512, name=f"{name}_1_1")
+    x = mlp_block(x, filters=256, name=f"{name}_2_1")
+    transformed_features = layers.Dense(
+        num_features * num_features,
+        kernel_initializer="zeros",
+        bias_initializer=keras.initializers.Constant(np.eye(num_features).flatten()),
+        #activity_regularizer=OrthogonalRegularizer(num_features),
+        name=f"{name}_final",
+    )(x)
+    transformed_features = layers.Reshape((num_features, num_features))(transformed_features)
+
+    return layers.Dot(axes=(2, 1), name=f"{name}_mm")([inputs, transformed_features])
+
+
 def pnet_part_seg_no_tnets(num_points: int) -> keras.Model:
-    input_points = keras.Input(shape=(None, 4))
+    input_points = keras.Input(shape=(None, 6))
+    full_mask = tf.logical_not(tf.math.equal(input_points, 0))
+    mask = tf.experimental.numpy.any(full_mask, axis=-1)
 
-    features_64 = t_dist_block(input_points, 64, name="features_64")
-    features_128_1 = t_dist_block(features_64, 128, name="features_128_1")
-    features_128_2 = t_dist_block(features_128_1, 128, name="features_128_2")
+    features_64 = t_dist_block_masked_bn(input_points, 64, "features_64", mask)
+    features_128_1 = t_dist_block_masked_bn(features_64, 128, "features_128_1", mask)
+    features_128_2 = t_dist_block_masked_bn(features_128_1, 128, "features_128_2", mask)
 
-    features_512 = t_dist_block(features_128_2, 512, name="features_512")
-    features_2048 = t_dist_block(features_512, 2048, name="pre_maxpool_block")
+    features_512 = t_dist_block_masked_bn(features_128_2, 512, "features_512", mask)
+    features_2048 = t_dist_block_masked_bn(features_512, 2048, "pre_maxpool_block", mask)
 
     # cast masked inputs to 0
     features_2048_masked = layers.Lambda(cast_to_zero, name='pre_maxpool_block_masked')([features_2048, input_points])
@@ -661,7 +729,59 @@ def pnet_part_seg_no_tnets(num_points: int) -> keras.Model:
         ]
     )
 
-    segmentation_features = t_dist_block(segmentation_input, 128, name="segmentation_features")
+    segmentation_features = t_dist_block_masked_bn(segmentation_input, 128, "segmentation_features", mask)
+    
+    # add extra t-dist and dropout layers
+    """
+    segmentation_features_256_1 = t_dist_block(segmentation_input, 256, 'segmentation_features_256_1')
+    dropout_0 = layers.Dropout(rate=.2)(segmentation_features_256_1)
+    segmentation_features_256_2 = t_dist_block(dropout_0, 256, 'segmentation_features_256_2')
+    dropout_1 = layers.Dropout(rate=.2)(segmentation_features_256_2)
+    segmentation_features_128 = t_dist_block(dropout_1,  128, name="segmentation_features_128")
+    dropout_2 = layers.Dropout(rate=.2)(segmentation_features_128)
+    """
+    last_dense = layers.Dense(1)
+    last_time = layers.TimeDistributed(last_dense,name='last_tdist')(segmentation_features)
+    outputs = layers.Activation('sigmoid', name="last_act")(last_time)
+
+    return keras.Model(input_points, outputs)
+
+
+def pnet_part_seg(num_points: int) -> keras.Model:
+    input_points = keras.Input(shape=(None, 6))
+    full_mask = tf.logical_not(tf.math.equal(input_points, 0))
+    mask = tf.experimental.numpy.any(full_mask, axis=-1)
+
+    transformed_inputs = tnet(input_points, num_features=6, name="input_transformation_block", input_points=input_points, mask=mask)
+
+    features_64 = t_dist_block_masked_bn(transformed_inputs,  64, "features_64", mask)
+    features_128_1 = t_dist_block_masked_bn(features_64, 128, "features_128_1", mask)
+    features_128_2 = t_dist_block_masked_bn(features_128_1, 128, "features_128_2", mask)
+    transformed_features = tnet(features_128_2, num_features=128, name="transformed_features", input_points=input_points, mask=mask)
+
+    features_512 = t_dist_block_masked_bn(transformed_features,  512, "features_512", mask)
+    features_2048 = t_dist_block_masked_bn(features_512, 2048, "pre_maxpool_block", mask)
+
+    # cast masked inputs to 0
+    features_2048_masked = layers.Lambda(cast_to_zero, name='pre_maxpool_block_masked')([features_2048, input_points])
+    
+    global_features = layers.MaxPool1D(pool_size=num_points, name="global_features")(
+        features_2048_masked
+    )
+    global_features = tf.tile(global_features, [1, num_points, 1])
+
+    # Segmentation head.
+    segmentation_input = layers.Concatenate(name="segmentation_input")(
+        [
+            features_64,
+            features_128_1,
+            features_128_2,
+            features_512,
+            global_features,
+        ]
+    )
+
+    segmentation_features = t_dist_block_masked_bn(segmentation_input, 128, "segmentation_features", mask)
     
     # add extra t-dist and dropout layers
     """

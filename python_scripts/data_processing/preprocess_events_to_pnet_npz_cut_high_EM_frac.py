@@ -59,83 +59,85 @@ def process_file(args):
 
     for event_idx in range(num_events):
         num_clusters = event_data["nCluster"][event_idx]
+        num_tracks = event_data["nTrack"][event_idx]
 
-        # append empty array for all cells in an event
-        if group_events:
-            for feature in [*node_feature_names, 'x', 'y', 'z', 'truth_EM_frac', 'cluster_cell_E']:
-                processed_event_data[feature].append([])
+        if include_tracks and num_tracks == 1:
+            # append empty array for all cells in an event
+            if group_events:
+                for feature in [*node_feature_names, 'x', 'y', 'z', 'truth_EM_frac', 'cluster_cell_E']:
+                    processed_event_data[feature].append([])
 
-        for cluster_idx in range(num_clusters):
-            cell_IDs = event_data['cluster_cell_ID'][event_idx][cluster_idx]
+            for cluster_idx in range(num_clusters):
+                cell_IDs = event_data['cluster_cell_ID'][event_idx][cluster_idx]
 
-            # get truth enery (EM/nonEM)
-            cell_hits_E_EM = np.array(event_data["cluster_cell_hitsE_EM"][event_idx][cluster_idx])
-            cell_hits_E_non_EM = np.array(event_data["cluster_cell_hitsE_nonEM"][event_idx][cluster_idx])
-            cell_hits_E = cell_hits_E_EM + cell_hits_E_non_EM
+                # get truth enery (EM/nonEM)
+                cell_hits_E_EM = np.array(event_data["cluster_cell_hitsE_EM"][event_idx][cluster_idx])
+                cell_hits_E_non_EM = np.array(event_data["cluster_cell_hitsE_nonEM"][event_idx][cluster_idx])
+                cell_hits_E = cell_hits_E_EM + cell_hits_E_non_EM
 
-            # filter out cells with truth energy of 0
-            threshold_E = cell_hits_E > energy_threshold
-            
-            cell_IDs = cell_IDs[threshold_E]
-            num_cells += len(cell_IDs)
-            cell_ID_map = sorter[np.searchsorted(cell_geo_ID, cell_IDs, sorter=sorter)]
-
-            # get truth energy fraction EM/EM + nonEM for each cell
-            truth_EM_frac = cell_hits_E_EM[threshold_E] / cell_hits_E[threshold_E]
-
-            # get cluster cell energy
-            cluster_cell_E = np.log10(event_data["cluster_cell_E"][event_idx][cluster_idx][threshold_E]) - LOG_ENERGY_MEAN
-
-            # node features
-            node_features = {}
-            for feature in node_feature_names:
-                node_features[feature] = cell_geo_data[feature][0][cell_ID_map]
-
-            # get cartesian coords
-            thetas = [2*np.arctan(np.exp(-eta)) for eta in node_features["cell_geo_eta"]]
-            x, y, z = spherical_to_cartesian(node_features["cell_geo_rPerp"], node_features["cell_geo_phi"], thetas)
-
-            # if grouped by events extend the set of event points with the clusters points
-            if group_events and num_cells != 0:
-                processed_event_data["truth_EM_frac"][samples_count].extend(truth_EM_frac)
-                processed_event_data["cluster_cell_E"][samples_count].extend(cluster_cell_E)
-
-                for feature in node_feature_names:
-                    processed_event_data[feature][samples_count].extend(node_features[feature])
-
-                processed_event_data["x"][samples_count].extend(x)
-                processed_event_data["y"][samples_count].extend(y)
-                processed_event_data["z"][samples_count].extend(z)
-
-            # if grouped by clusters append the set of clusters points
-            elif num_cells != 0 and sum(truth_EM_frac) / len(truth_EM_frac) < 0.5:
-                processed_event_data["truth_EM_frac"].append(truth_EM_frac)
-                processed_event_data["cluster_cell_E"].append(cluster_cell_E)
-
-                for feature in node_feature_names:
-                    processed_event_data[feature].append(node_features[feature])
-
-                processed_event_data["x"].append(x)
-                processed_event_data["y"].append(y)
-                processed_event_data["z"].append(z)
+                # filter out cells with truth energy of 0
+                threshold_E = cell_hits_E > energy_threshold
                 
-                samples_count += 1
+                cell_IDs = cell_IDs[threshold_E]
+                num_cells += len(cell_IDs)
+                cell_ID_map = sorter[np.searchsorted(cell_geo_ID, cell_IDs, sorter=sorter)]
 
-                if num_cells > max_cells:
-                    max_cells = num_cells
-                num_cells = 0
-            else:
-                num_cells = 0
-            
-        if group_events and num_cells > 0:
-            if sum(processed_event_data["truth_EM_frac"][samples_count]) / len(processed_event_data["truth_EM_frac"][samples_count]) < 0.5: # ONLY KEEP EVENTS W MEAN EM FRAC < 0.5
-                if num_cells > max_cells:
-                    max_cells = num_cells
-                samples_count += 1
-            else:
-                for key in processed_event_data:
-                    processed_event_data[key] = processed_event_data[key][:-1] # remove event from data
-                num_cells = 0
+                # get truth energy fraction EM/EM + nonEM for each cell
+                truth_EM_frac = cell_hits_E_EM[threshold_E] / cell_hits_E[threshold_E]
+
+                # get cluster cell energy
+                cluster_cell_E = np.log10(event_data["cluster_cell_E"][event_idx][cluster_idx][threshold_E]) - LOG_ENERGY_MEAN
+
+                # node features
+                node_features = {}
+                for feature in node_feature_names:
+                    node_features[feature] = cell_geo_data[feature][0][cell_ID_map]
+
+                # get cartesian coords
+                thetas = [2*np.arctan(np.exp(-eta)) for eta in node_features["cell_geo_eta"]]
+                x, y, z = spherical_to_cartesian(node_features["cell_geo_rPerp"], node_features["cell_geo_phi"], thetas)
+
+                # if grouped by events extend the set of event points with the clusters points
+                if group_events and num_cells != 0:
+                    processed_event_data["truth_EM_frac"][samples_count].extend(truth_EM_frac)
+                    processed_event_data["cluster_cell_E"][samples_count].extend(cluster_cell_E)
+
+                    for feature in node_feature_names:
+                        processed_event_data[feature][samples_count].extend(node_features[feature])
+
+                    processed_event_data["x"][samples_count].extend(x)
+                    processed_event_data["y"][samples_count].extend(y)
+                    processed_event_data["z"][samples_count].extend(z)
+
+                # if grouped by clusters append the set of clusters points
+                elif num_cells != 0 and sum(truth_EM_frac) / len(truth_EM_frac) < 0.5:
+                    processed_event_data["truth_EM_frac"].append(truth_EM_frac)
+                    processed_event_data["cluster_cell_E"].append(cluster_cell_E)
+
+                    for feature in node_feature_names:
+                        processed_event_data[feature].append(node_features[feature])
+
+                    processed_event_data["x"].append(x)
+                    processed_event_data["y"].append(y)
+                    processed_event_data["z"].append(z)
+                    
+                    samples_count += 1
+
+                    if num_cells > max_cells:
+                        max_cells = num_cells
+                    num_cells = 0
+                else:
+                    num_cells = 0
+                
+            if group_events and num_cells > 0:
+                if sum(processed_event_data["truth_EM_frac"][samples_count]) / len(processed_event_data["truth_EM_frac"][samples_count]) < 0.5: # ONLY KEEP EVENTS W MEAN EM FRAC < 0.5
+                    if num_cells > max_cells:
+                        max_cells = num_cells
+                    samples_count += 1
+                else:
+                    for key in processed_event_data:
+                        processed_event_data[key] = processed_event_data[key][:-1] # remove event from data
+                    num_cells = 0
     
     print("samples count:", samples_count)
     for file_type in file_features:
