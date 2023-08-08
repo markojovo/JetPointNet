@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "3" # GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = "5" # GPU
 import tensorflow as tf
 from tensorflow import keras
 from keras import layers
@@ -33,45 +33,53 @@ def masked_bce_pointwise_loss(y_true, y_pred):
     return K.sum(K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask)), axis=None) / K.sum(mask, axis=None)
 
 # DATA AND OUTPUT DIRS
-data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_tracks_cor'
-#output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_classify/pnet_part_seg_no_tnets_charged_events_thresh_0.787_tr_707_val_210_tst_10_lr_1e-6'
-output_dir = "/fast_scratch_1/jbohm/train_testing_data/pointnet_train_tracks_cor/pnet_charged_events_1_track_add_min_dist_tr_50_val_5_tst_5_lr_1e-2_masked_BN_SGD"
+data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1'
+output_dir = "/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1/tr_50_val_5_tst_5_lr_1e-2_BS_100_no_tnets_1_track_add_min_dist_cut_track_pipm_delta_R_lt_0.1"
 max_points_file = '/max_points_1_track.txt'
 
-num_train_files = 50 #707
+num_train_files = 51 #707
 num_val_files = 5 #210
 num_test_files = 5 #10
-events_per_file = 3000
+events_per_file = 3800
 start_at_epoch = 0 # load start_at_epoch - 1
+add_min_track_dist = True
 
-EPOCHS = 5
-BATCH_SIZE = 50
+EPOCHS = 100
+BATCH_SIZE = 100
 LEARNING_RATE = 1e-2
 
 # VALIDATE ONLY
 validate_only = False
 if validate_only:
-    model = "pnet_charged_events_1_track_add_min_dist_and_energy_ratio_tr_650_val_198_tst_10_lr_1e-2_masked_BN"
+    model = "tr_68_val_7_tst_5_lr_1e-2_BS_100_no_tnets_1_track_add_min_dist_cut_R_lt_0.1"
     test_set = "test_1_track"
-    data_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_evaluate_tracks/'
-    output_dir = "/fast_scratch_1/jbohm/train_testing_data/pointnet_train_tracks_cor/" + model
-    start_at_epoch = 13 # state to load + 1
+    data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1/'
+    output_dir = data_dir + model
+    start_at_epoch = 97 # state to load + 1
     BATCH_SIZE = 100
-    num_validate_files = 10
+    num_validate_files = 5
     validate_files_dir = data_dir + test_set + "/"
     validate_files = np.sort(glob.glob(validate_files_dir+'*.npz'))[:num_validate_files]
-    max_points_file = 'max_points_mixed_1_track.txt'
-    save_preds_file = data_dir + model + "_" + test_set + "_preds_" + str(start_at_epoch - 1) + ".npy"
-    save_labels_file = data_dir + test_set + "_labels.npy"
+    max_points_file = '/max_points_1_track.txt'
+    save_preds_file = data_dir + model + "/tests/" + test_set + "_preds_" + str(start_at_epoch - 1) + ".npy"
+    save_labels_file = data_dir + model + "/tests/" + test_set + "_labels.npy"
     
 
 # DATA GENERATORS
 def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite=True, add_energy_ratio=False, add_min_track_dist=False, add_both=False):
     while True:
         for file in file_names:
+            #print("loaded file")
             point_net_data = np.load(file)
-            cluster_data = point_net_data['X']
-            Y = point_net_data['Y']
+            track_pipm_delta_R = np.load("/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_processed_train_files/delta_R/" + "_".join(file.split("/")[-1].split("_")[:-2]) + "_track_pipm_delta_R.npy", allow_pickle=True) # load the noy file instead of npz # 
+
+            #print("track cut len", len(track_pipm_delta_R), "events len", len(point_net_data['X']))
+
+            # first cut out the veryyyy few events w nTracks == 1 but there is info for more than one track :/
+            cut = np.array([isinstance(event_track_pipm_delta_R, float) and event_track_pipm_delta_R < 0.1 for event_track_pipm_delta_R in track_pipm_delta_R])
+
+            cluster_data = point_net_data['X'][cut]
+            Y = point_net_data['Y'][cut]
 
             # pad X data to have y dimension of max_num_points
             if add_energy_ratio or add_min_track_dist:
@@ -82,13 +90,7 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
                 X_padded = np.zeros((cluster_data.shape[0], max_num_points, cluster_data.shape[2]))
             Y_padded = np.negative(np.ones(((cluster_data.shape[0], max_num_points, 1)))) # NOTE: update for weighted cells
             
-            for i, cluster in enumerate(cluster_data):
-                # update track to be energy # NOTE: errrr - used logged momentum for this calculation :/
-                #track_momentum = cluster[:, 0][cluster[:, 4] == 1] # assume MeV/c ?? ** TODO: check this
-                #charged_pion_mass = 134.9768 # MeV/c^2
-                #track_energy = np.sqrt(track_momentum**2 + charged_pion_mass**2)
-                #cluster[:, 0][cluster[:, 4] == 1] = np.log10(cluster[:, 0][cluster[:, 4] == 1]) - MEAN_TRACK_LOG_MOMENTUM
-                
+            for i, cluster in enumerate(cluster_data):                
                 if add_energy_ratio or add_both:
                    track_values = cluster[:,0][cluster[:,4] == 1]
                    track_value = track_values[0] if np.any(track_values) else 0
@@ -113,7 +115,7 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
 
                 X_padded[i, :len(cluster), :5] = cluster
                 Y_padded[i, :len(cluster), :] = Y[i]
-
+    
             # split into batch_size groups of clusters
             for i in range(1, math.ceil(cluster_data.shape[0]/batch_size)):
                 yield X_padded[(i-1)*batch_size:i*batch_size], Y_padded[(i-1)*batch_size:i*batch_size]
@@ -149,9 +151,9 @@ def batched_data_generator_cut(file_names, batch_size, max_num_points, loop_infi
         if not loop_infinite:
             break
 
-train_output_dir = data_dir + '/train_1_track_larger/'
-val_output_dir = data_dir + '/val_1_track_larger/'
-test_output_dir = data_dir + '/test_1_track_larger/'
+train_output_dir = data_dir + '/train_1_track/'
+val_output_dir = data_dir + '/val_1_track/'
+test_output_dir = data_dir + '/test_1_track/'
 
 
 train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
@@ -166,12 +168,12 @@ num_batches_test = (len(test_files) * events_per_file) / BATCH_SIZE
 with open(data_dir + max_points_file) as f:
     N = int(f.readline())
 
-train_generator = batched_data_generator(train_files, BATCH_SIZE, N, add_min_track_dist=True)
-val_generator = batched_data_generator(val_files, BATCH_SIZE, N, add_min_track_dist=True)
-test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=True)
+train_generator = batched_data_generator(train_files, BATCH_SIZE, N, add_min_track_dist=add_min_track_dist)
+val_generator = batched_data_generator(val_files, BATCH_SIZE, N, add_min_track_dist=add_min_track_dist)
+test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
 
 # COMPILE MODEL
-model = pnet_part_seg(N)
+model = pnet_part_seg_no_tnets(N)
 
 lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     initial_learning_rate=1e-2,
@@ -179,8 +181,8 @@ lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     decay_rate=0.9)
 
 decay_rate = 0.1/5
-#opt = keras.optimizers.Adam(learning_rate=LEARNING_RATE)
-opt = keras.optimizers.SGD(lr=0.1, momentum=0.8, decay=decay_rate)
+opt = keras.optimizers.Adam(learning_rate=LEARNING_RATE)
+#opt = keras.optimizers.SGD(lr=0.1, momentum=0.8, decay=decay_rate)
 model.compile(loss=masked_bce_pointwise_loss, optimizer=opt) # default bce is sum over batch size and doesn't include masking => superrrr low numbers ie. -20678613091047.0508 
 model.summary()
 
@@ -190,7 +192,7 @@ if start_at_epoch:
 
 
 if validate_only:
-    validate_gernerator = batched_data_generator(validate_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=True)
+    validate_gernerator = batched_data_generator(validate_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
     predictions = []
     labels = []
     for X_test, Y_test in validate_gernerator:
@@ -219,7 +221,7 @@ if not os.path.exists(output_dir + "/tests"):
 class SaveEpoch(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs={}):
         # save preds on new test file
-        per_epoch_test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=True)
+        per_epoch_test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
 
         predictions = []
         labels = []

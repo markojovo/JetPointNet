@@ -1,0 +1,4 @@
+rho_files: ["/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_root_files/rho_full.root"]
+save_dir: /fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_npy_files
+num_procs: 32
+file_len: 6000

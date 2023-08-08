@@ -1,7 +1,0 @@
-awkward==1.8.0
-keras==2.6.0
-numpy==1.23.1
-PyYAML==6.0
-tensorflow==2.6.0+nv
-uproot==4.3.3
-util==0.0.1

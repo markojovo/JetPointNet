@@ -22,7 +22,6 @@ output_dir = '/fast_scratch_1/jbohm/train_testing_data/pointnet_train_2/gamma_32
 num_train_files = 325
 num_val_files = 40
 num_test_files = 5
-#test_file = data_dir + "/val/pi0_14_pipm_13_14_len_6000_i_10_cartesian.npz"
 clusters_per_file = 9000 # approx since it varries
 start_at_epoch = 0
 
@@ -46,7 +45,7 @@ import csv
 ## local ML Packages
 import sys
 #sys.path.append(module_path)
-import deep_set_util as dsu
+import PointNet_Segmentation.utils.deep_set_util as dsu
 import pnet_models
 from pnet_models_updated import PointNet_gamma_no_tnet, part_segmentation_model, part_segmentation_model_propagate_mask, PointNet_omicron, PointNet_delta, PointNet_gamma
 
