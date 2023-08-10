@@ -1,5 +1,5 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "5" # GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = "5" # SET GPU
 import tensorflow as tf
 from tensorflow import keras
 from keras import layers
@@ -20,18 +20,6 @@ print()
 MEAN_TRACK_LOG_ENERGY = 2.4
 
 
-# LOSS
-def masked_bce_weighted_pointwise_loss(y_true, y_pred):
-    weights = tf.expand_dims(y_true[:,:,1], -1)
-    y_true = tf.expand_dims(y_true[:,:,0], -1)
-    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
-    return K.sum(tf.multiply(tf.multiply(weights, mask), K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask))), axis=None) / K.sum(mask, axis=None)
-
-def masked_bce_pointwise_loss(y_true, y_pred):
-    y_true = tf.expand_dims(y_true[:,:,0], -1)
-    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
-    return K.sum(K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask)), axis=None) / K.sum(mask, axis=None)
-
 # DATA AND OUTPUT DIRS
 data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1'
 output_dir = "/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1/tr_50_val_5_tst_5_lr_1e-2_BS_100_no_tnets_1_track_add_min_dist_cut_track_pipm_delta_R_lt_0.1"
@@ -48,7 +36,11 @@ EPOCHS = 100
 BATCH_SIZE = 100
 LEARNING_RATE = 1e-2
 
-# VALIDATE ONLY
+train_output_dir = data_dir + '/train_1_track/'
+val_output_dir = data_dir + '/val_1_track/'
+test_output_dir = data_dir + '/test_1_track/'
+
+# VALIDATE ONLY (load a trained model and save predictions)
 validate_only = False
 if validate_only:
     model = "tr_68_val_7_tst_5_lr_1e-2_BS_100_no_tnets_1_track_add_min_dist_cut_R_lt_0.1"
@@ -122,39 +114,18 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
         if not loop_infinite:
             break
 
-CUT_ONE_CLASS_EVENTS = 1
-def batched_data_generator_cut(file_names, batch_size, max_num_points, loop_infinite=True):
-    while True:
-        for file in file_names:
-            point_net_data = np.load(file)
-            cluster_data = point_net_data['X']
-            Y = point_net_data['Y']
-            #print("loaded file")
 
-            # pad X data to have y dimension of max_num_points
-            X_padded = []#np.empty((0, max_num_points, cluster_data.shape[2])) # pad X data with 0's instead of -1's to have less influence on BN stats??
-            Y_padded = []#np.empty((0, max_num_points, 1)) # NOTE: update for weighted cells
-            clus_idx = 0
-            for i, cluster in enumerate(cluster_data):
-                frac_em_class = np.sum(Y[i][Y[i] != -1]) / len(Y[i][Y[i] != -1])
-                if max(frac_em_class, 1 - frac_em_class) < CUT_ONE_CLASS_EVENTS:
-                    X_padded.append(np.zeros((max_num_points, cluster_data.shape[2])))
-                    Y_padded.append(np.negative(np.ones((max_num_points, 1))))
-                    X_padded[clus_idx][:cluster.shape[0], :] = cluster
-                    Y_padded[clus_idx][:cluster.shape[0], :] = Y[i]
-                    clus_idx += 1
-            X_padded = np.asarray(X_padded)
-            Y_padded = np.asarray(Y_padded)
-            # split into batch_size groups of clusters
-            for i in range(1, math.ceil(X_padded.shape[0]/batch_size)):
-                yield X_padded[(i-1)*batch_size:i*batch_size], Y_padded[(i-1)*batch_size:i*batch_size]
-        if not loop_infinite:
-            break
+# LOSS
+def masked_bce_weighted_pointwise_loss(y_true, y_pred):
+    weights = tf.expand_dims(y_true[:,:,1], -1)
+    y_true = tf.expand_dims(y_true[:,:,0], -1)
+    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
+    return K.sum(tf.multiply(tf.multiply(weights, mask), K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask))), axis=None) / K.sum(mask, axis=None)
 
-train_output_dir = data_dir + '/train_1_track/'
-val_output_dir = data_dir + '/val_1_track/'
-test_output_dir = data_dir + '/test_1_track/'
-
+def masked_bce_pointwise_loss(y_true, y_pred):
+    y_true = tf.expand_dims(y_true[:,:,0], -1)
+    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
+    return K.sum(K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask)), axis=None) / K.sum(mask, axis=None)
 
 train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
 val_files = np.sort(glob.glob(val_output_dir+'*.npz'))[:num_val_files]
@@ -183,13 +154,13 @@ lr_schedule = keras.optimizers.schedules.ExponentialDecay(
 decay_rate = 0.1/5
 opt = keras.optimizers.Adam(learning_rate=LEARNING_RATE)
 #opt = keras.optimizers.SGD(lr=0.1, momentum=0.8, decay=decay_rate)
-model.compile(loss=masked_bce_pointwise_loss, optimizer=opt) # default bce is sum over batch size and doesn't include masking => superrrr low numbers ie. -20678613091047.0508 
+
+model.compile(loss=masked_bce_pointwise_loss, optimizer=opt)
 model.summary()
 
 # if resuming training load saved weights
 if start_at_epoch:
     model.load_weights(output_dir + "/weights/weights_" + str(start_at_epoch - 1) + ".h5")
-
 
 if validate_only:
     validate_gernerator = batched_data_generator(validate_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
@@ -209,7 +180,7 @@ if validate_only:
     assert(False)
 
 # CALLBACKS
-# mkdirs if not present
+# make directories if not present
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 if not os.path.exists(output_dir + "/weights"):
