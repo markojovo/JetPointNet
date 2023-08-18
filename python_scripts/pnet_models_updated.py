@@ -284,7 +284,7 @@ def tnet(inputs: tf.Tensor, num_features: int, name: str, input_points, mask: tf
 
 
 def pnet_part_seg_no_tnets(num_points: int) -> keras.Model:
-    input_points = keras.Input(shape=(None, 4))
+    input_points = keras.Input(shape=(None, 6))
     full_mask = tf.logical_not(tf.math.equal(input_points, 0))
     mask = tf.experimental.numpy.any(full_mask, axis=-1)
 

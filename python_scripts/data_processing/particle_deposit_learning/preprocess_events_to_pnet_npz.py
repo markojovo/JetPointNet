@@ -7,96 +7,13 @@ import uproot
 import awkward as ak
 import multiprocessing
 import vector
+from utils.track_metadata import *
+from utils.dataprocessing_util import *
 
-sys.path.append('/home/jbohm/start_tf/LCStudies')
 
 LOG_ENERGY_MEAN = -1 # unrounded mean is ~ -0.93
 LOG_MEAN_TRACK_MOMETUM = 2
 
-# track metadata
-calo_layers = ['EMB1', 'EMB2', 'EMB3', 'EME1', 'EME2', 'EME3', 'HEC0', 'HEC1',
-    'HEC2', 'HEC3', 'TileBar0', 'TileBar1', 'TileBar2', 'TileGap1', 'TileGap2',
-    'TileGap3', 'TileExt0', 'TileExt1', 'TileExt2']
-
-NUM_TRACK_POINTS = len(calo_layers)
-
-has_fixed_r = {
-    'EMB1': True,
-    'EMB2': True,
-    'EMB3': True,
-    'EME1': False,
-    'EME2': False,
-    'EME3': False,
-    'HEC0': False,
-    'HEC1': False,
-    'HEC2': False,
-    'HEC3': False,
-    'TileBar0': True,
-    'TileBar1': True,
-    'TileBar2': True,
-    'TileGap1': True,
-    'TileGap2': True,
-    'TileGap3': True,
-    'TileExt0': True,
-    'TileExt1': True,
-    'TileExt2': True
-}
-
-fixed_r = {
-    'EMB1': 1532.18,
-    'EMB2': 1723.89,
-    'EMB3': 1923.02,
-    'TileBar0': 2450.00,
-    'TileBar1': 2995.00,
-    'TileBar2': 3630.00,
-    'TileGap1': 3215.00,
-    'TileGap2': 3630.00,
-    'TileGap3': 2246.50,
-    'TileExt0': 2450.00,
-    'TileExt1': 2870.00,
-    'TileExt2': 3480.00
-}
-
-fixed_z = {
-    'EME1': 3790.03,
-    'EME2': 3983.68,
-    'EME3': 4195.84,
-    'HEC0': 4461.25,
-    'HEC1': 4869.50,
-    'HEC2': 5424.50,
-    'HEC3': 5905.00,
-}
-
-def get_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("config", default=None, type=str)
-    return parser.parse_args()
-
-# by generic definition of spherical to cartesian coord conversion
-def spherical_to_cartesian_prev_wrong(rs, thetas, phis):
-    # convert to x, y, z
-    x, y, z = [], [], []
-
-    for i, r in enumerate(rs):
-        x.append(r*np.sin(phis[i])*np.cos(thetas[i]))
-        y.append(r*np.sin(phis[i])*np.sin(thetas[i]))
-        z.append(r*np.cos(phis[i]))
-
-    return np.array(x), np.array(y), np.array(z)
-
-def spherical_to_cartesian(rs, phis, thetas):
-    # convert to x, y, z
-    x, y, z = [], [], []
-
-    for i, r in enumerate(rs):
-        x.append(r*np.cos(phis[i]))
-        y.append(r*np.sin(phis[i]))
-        z.append( r/np.tan(thetas[i]))
-
-    return np.array(x), np.array(y), np.array(z)
-
-def flatten_clus_in_events(events):
-    return [[cell for clus in event for cell in clus] for event in events]
 
 def process_file(args):
     file_name, rho_dir, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, weight_cells, include_tracks, left_from_include_tracks, add_3_min_dists_and_layer = args
@@ -105,7 +22,7 @@ def process_file(args):
     events_arr = np.load(rho_dir + file_name, allow_pickle=True).item()
     
     """ PREPROCESSING """
-    # aggregate the data with the cluster it is in
+    # aggregate the data with the cluster it is in and its EM probability (for analysis not training)
     events_arr["clus_idx"] = []
     events_arr["clus_em_prob"] = []
     for event_idx, event_clus_cell_E in enumerate(events_arr["cluster_cell_ID"]):
@@ -123,8 +40,7 @@ def process_file(args):
     events_arr["cluster_cell_hitsTruthIndex"] = events_arr["cluster_cell_hitsTruthIndex"][events_arr["cluster_cell_hitsTruthE"] >= 0]
 
     # Fix 2 - cut out the events w a electron/positron, no clusters, or no cell hits
-    # [ 213.  211.  111.  -11.   11.   22.]
-    # find the occurances of this array in the list 
+    # for electron/positron pairs find the occurrences of this array in the list [ 213.  211.  111.  -11.   11.   22.]  (if there is a pdgId == 11)
     events_arr_resized = {}
     elec_pos_events = ak.Array([np.count_nonzero(np.array(event_truthPartPdgId) == 11) > 0 for event_truthPartPdgId in events_arr["truthPartPdgId"]])
     print("num events with electron/positron:", np.count_nonzero(elec_pos_events))
@@ -138,25 +54,23 @@ def process_file(args):
 
     events_arr = events_arr_resized
 
-    # Fix 3 - cut out the padding from the end of particle deposits array
+    # Fix 3 - cut out the padding from the end of particle deposits arrays (cluster_cell_hitsTruthE and cluster_cell_hitsTruthIndex)
     events_arr["cluster_cell_hitsTruthE"] = [[cluster_cell_hitsTruthE_clus[:len(events_arr["cluster_cell_hitsE_EM"][event_idx][clus_idx])] for clus_idx, cluster_cell_hitsTruthE_clus in enumerate(cluster_cell_hitsTruthE_event)] for event_idx, cluster_cell_hitsTruthE_event in enumerate(events_arr["cluster_cell_hitsTruthE"])]
     events_arr["cluster_cell_hitsTruthIndex"] = [[cluster_cell_hitsTruthIndex_clus[:len(events_arr["cluster_cell_hitsE_EM"][event_idx][clus_idx])] for clus_idx, cluster_cell_hitsTruthIndex_clus in enumerate(cluster_cell_hitsTruthIndex_event)] for event_idx, cluster_cell_hitsTruthIndex_event in enumerate(events_arr["cluster_cell_hitsTruthIndex"])]
 
-    # Fix 4 - flatten events to cells & remove cell repeats
+    # Fix 4 - flatten clusters to events & remove cell repeats from when a cell is in more than one topocluster
     cellwise_data_keys = ["cluster_cell_E", "cluster_cell_hitsE_EM", "cluster_cell_hitsE_nonEM", "cluster_cell_hitsTruthE", "cluster_cell_hitsTruthIndex", "cluster_cell_ID", "clus_idx", "clus_em_prob"]
 
     # flatten cellwise data to only be grouped by events, not clus and events
     for key in cellwise_data_keys:
         events_arr[key] = flatten_clus_in_events(events_arr[key])
 
-    # iterate through the events and remove any repeated cell deposits (if 2+ of same cell ID in one event remove the extra)
-
     # define unique versions of the cellwise data arrays
     cellwise_data_unique = {}
     for key in cellwise_data_keys:
         cellwise_data_unique[key + "_unique"] = []
 
-    # for every event remove the repeat 
+    # iterate through the events and remove any repeated cell deposits (if 2+ of same cell ID in one event remove the extra)
     for event_idx in np.arange(len(events_arr["cluster_cell_ID"])):
         # get the idx of the unique cell IDs
         unique_events_cells_IDs, unique_cells_idx = np.unique(events_arr["cluster_cell_ID"][event_idx], return_index=True)
@@ -174,6 +88,7 @@ def process_file(args):
     """ DONE PREPROCESSING """
     """"""""""""""""""""""""""
 
+    # save the preprocessed data to be used for analysis
     np.save("/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_processed_test_data/" + file_name, event_data)
 
     num_events = len(event_data["eventNumber"])
@@ -195,6 +110,7 @@ def process_file(args):
     for feature in ['x', 'y', 'z', 'P', 'min_dist', 'min_eta', 'min_phi', 'sampling_layer']:
         processed_event_track_data[feature] = []
 
+    # iterate over events and compute/save necessary features to processed_event_data/processed_event_track_data
     for event_idx in range(num_events):
         print(event_idx)
         num_tracks = event_data["nTrack"][event_idx]
@@ -241,8 +157,9 @@ def process_file(args):
             if not include_tracks or np.count_nonzero(non_null_tracks) != 0:
                 cell_IDs = event_data['cluster_cell_ID'][event_idx]
 
-                # get truth energy deposits
+                # get fraction cell energy deposited by pi0 (particle idx != 1 since particle idx1 is charged pion)
                 frac_pi0_energy = ak.sum(events_arr["cluster_cell_hitsTruthE"][event_idx][events_arr["cluster_cell_hitsTruthIndex"][event_idx] != 1], axis=1)/ak.sum(events_arr["cluster_cell_hitsTruthE"][event_idx], axis=1)
+                # find cells with no particles contributing energy - could be from removing the neg cell deposits
                 empty_contr_frac = np.isnan(frac_pi0_energy)
 
                 # filter out cells without truth particle deposits
@@ -252,9 +169,8 @@ def process_file(args):
                 num_cells = len(cell_IDs)
                 cell_ID_map = sorter[np.searchsorted(cell_geo_ID, cell_IDs, sorter=sorter)]
 
-                
                 # classify leading particle contributor
-                class_frac_pi0_energy = frac_pi0_energy[threshold_E_deposit] > 0.5
+                class_frac_pi0_energy = frac_pi0_energy[threshold_E_deposit] > 0.5 # class 1 if pi0 frac > 0.5, otherwise class 2
 
                 # get cluster cell energy
                 cell_E = event_data["cluster_cell_E"][event_idx][threshold_E_deposit]
@@ -271,14 +187,12 @@ def process_file(args):
                 x, y, z = spherical_to_cartesian(node_features["cell_geo_rPerp"], node_features["cell_geo_phi"], thetas)
 
             
-                processed_event_data["cell_hitsTruthIndex"].append(event_data["cluster_cell_hitsTruthIndex"][event_idx][threshold_E_deposit])
-                processed_event_data["cell_hitsTruthE"].append(event_data["cluster_cell_hitsTruthE"][event_idx][threshold_E_deposit])
                 processed_event_data["cell_E"].append(cell_E)
                 processed_event_data["cell_E_weight"].append(cell_E_weight)
                 processed_event_data["class_pi0_lead_energy"].append(class_frac_pi0_energy)
-                processed_event_data["clus_idx"].append(event_data["clus_idx"][event_idx][threshold_E_deposit])
 
-
+                
+                # calculate delta R between particle and track
                 pipm_idx = 1
                 pi0_idx = 2
 
@@ -294,11 +208,6 @@ def process_file(args):
                 track_phi = np.squeeze(event_data['trackPhi'][event_idx])
                 track_pT = np.squeeze(event_data['trackP'][event_idx])
 
-                if not isinstance(track_eta, float) or not isinstance(track_phi, float) or not isinstance(track_pT, float):
-                    print("eta:", track_eta)
-                    print("phi:", track_phi)
-                    print("P:", track_pT)
-                    print("num_tracks:", num_tracks)
 
                 # angular separation between the vectors in the eta/phi plane - over events
                 pipm_vector = vector.obj(eta=pipm_eta, phi=pipm_phi, rho=pipm_pT)
@@ -366,9 +275,9 @@ def process_file(args):
                         eta_dists[:, j] = np.abs(processed_event_data["cell_geo_eta"][samples_count] - eta_tracks[track_point_idx])
                         phi_dists[:, j] = np.abs(processed_event_data["cell_geo_phi"][samples_count] - phi_tracks[track_point_idx])
                     
-                    min_dists = np.min(dists, axis=1)
-                    min_eta_dists = np.min(eta_dists, axis=1)
-                    min_phi_dists = np.min(phi_dists, axis=1)
+                    #min_dists = np.min(dists, axis=1)
+                    #min_eta_dists = np.min(eta_dists, axis=1)
+                    #min_phi_dists = np.min(phi_dists, axis=1)
                     #processed_event_data["min_dist"][samples_count][:NUM_TRACK_POINTS] = min_dists
                     #processed_event_data["min_eta"][samples_count][:NUM_TRACK_POINTS] = min_eta_dists
                     #processed_event_data["min_phi"][samples_count][:NUM_TRACK_POINTS] = min_phi_dists
@@ -427,9 +336,11 @@ def process_file(args):
                 point_label[idx, :len_cluster] = np.transpose([processed_event_data["class_pi0_lead_energy"][idx]])
 
 
+    # save X and Y train point data
     file_path = save_dir + "/" + file_name.split(".")[0] + '_1_track.npz'
     np.savez(file_path, X=point_data, Y=point_label)
 
+    # save extra data to make cuts
     np.save(save_dir + "/delta_R/" + file_name.split(".")[0] + "_delta_R.npy", processed_event_data["delta_R"])
     np.save(save_dir + "/delta_R/" + file_name.split(".")[0] + "_track_pipm_delta_R.npy", processed_event_data["track_pipm_delta_R"])
     np.save(save_dir + "/delta_R/" + file_name.split(".")[0] + "_track_pi0_delta_R.npy", processed_event_data["track_pi0_delta_R"])
@@ -439,6 +350,8 @@ def process_file(args):
 
 if __name__ == "__main__":
     t_start = time.time()
+
+    # get arguments from yaml file
     args = get_args()
     
     config_file = "./preprocess_events_to_pnet_npz_config.yaml"
@@ -458,12 +371,11 @@ if __name__ == "__main__":
 
     rho_dir = "/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_npy_files/" 
 
-    # load cell geo tree dict
+    # load cell geo tree to look uo cells location
     file = uproot.open("/data/atlas/data/rho_delta/rho_small.root")
     cell_geo_tree = file["CellGeo"]
 
     node_feature_names = cell_geo_tree.keys()[1:7] # 'cell_geo_sampling', 'cell_geo_eta', 'cell_geo_phi', 'cell_geo_rPerp', 'cell_geo_deta', 'cell_geo_dphi'
-
 
     cell_geo_data = cell_geo_tree.arrays(library='np')
     cell_geo_ID = cell_geo_data['cell_geo_ID'][0]
@@ -477,19 +389,22 @@ if __name__ == "__main__":
     max_points_queue = manager.Queue()
     pool = multiprocessing.Pool(num_procs)
 
+    # start a multiprocessing pool to convert each file on its own process
     pool.map(process_file, [(file_name, rho_dir, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, weight_cells, include_tracks, left_from_include_tracks, add_3_min_dists_and_layer) for file_name in rho_files])
 
+    # as files are processed and the max num points are added to queue on completion, compare with current max 
     while not max_points_queue.empty():
         q_max_points = max_points_queue.get()
 
         if q_max_points > max_points:
             max_points = q_max_points
 
-        try:
-            with open(save_dir + 'max_points_1_track.txt') as f:
-                current_max_points = int(f.readline())
-        except IOError:
-            current_max_points = 0
+    # update max points if a exceeded
+    try:
+        with open(save_dir + 'max_points_1_track.txt') as f:
+            current_max_points = int(f.readline())
+    except IOError:
+        current_max_points = 0
     
     if max_points > current_max_points:
         with open(save_dir + 'max_points_1_track.txt', 'w') as f:

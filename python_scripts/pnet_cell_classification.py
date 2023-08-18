@@ -63,15 +63,15 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
         for file in file_names:
             #print("loaded file")
             point_net_data = np.load(file)
-            track_pipm_delta_R = np.load("/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_processed_train_files/delta_R/" + "_".join(file.split("/")[-1].split("_")[:-2]) + "_track_pipm_delta_R.npy", allow_pickle=True) # load the noy file instead of npz # 
+            #track_pipm_delta_R = np.load("/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_processed_train_files/delta_R/" + "_".join(file.split("/")[-1].split("_")[:-2]) + "_track_pipm_delta_R.npy", allow_pickle=True) # load the noy file instead of npz # 
 
             #print("track cut len", len(track_pipm_delta_R), "events len", len(point_net_data['X']))
 
             # first cut out the veryyyy few events w nTracks == 1 but there is info for more than one track :/
-            cut = np.array([isinstance(event_track_pipm_delta_R, float) and event_track_pipm_delta_R < 0.1 for event_track_pipm_delta_R in track_pipm_delta_R])
+            #cut = np.array([isinstance(event_track_pipm_delta_R, float) and event_track_pipm_delta_R < 0.1 for event_track_pipm_delta_R in track_pipm_delta_R])
 
-            cluster_data = point_net_data['X'][cut]
-            Y = point_net_data['Y'][cut]
+            cluster_data = point_net_data['X']#[cut]
+            Y = point_net_data['Y']#[cut]
 
             # pad X data to have y dimension of max_num_points
             if add_energy_ratio or add_min_track_dist:

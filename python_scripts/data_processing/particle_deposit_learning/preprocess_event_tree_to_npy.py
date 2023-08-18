@@ -4,6 +4,7 @@ import yaml
 import uproot
 import math
 import multiprocessing
+from utils.dataprocessing_util import *
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -38,21 +39,6 @@ if __name__ == "__main__":
     num_procs = config["num_procs"]
     file_len = config["file_len"]
 
-    keys = ["eventNumber", "nCluster", "truthPartE", "truthPartPt", "cluster_E", "cluster_E_LCCalib", "cluster_EM_PROBABILITY", 
-        "cluster_E", "cluster_HAD_WEIGHT", "truthPartPdgId", "cluster_ENG_CALIB_TOT", "cluster_Eta", "cluster_cell_ID", "cluster_cell_E", "cluster_cell_ID", "cluster_cell_hitsE_EM", "cluster_cell_hitsE_nonEM", 
-        "cluster_cell_E", "cluster_Pt", 'trackPhi_EMB1', 'trackPhi_EMB2', 'trackPhi_EMB3',
-        'trackPhi_EME1', 'trackPhi_EME2', 'trackPhi_EME3', 'trackPhi_HEC0',
-        'trackPhi_HEC1', 'trackPhi_HEC2', 'trackPhi_HEC3', 'trackPhi_TileBar0',
-        'trackPhi_TileBar1', 'trackPhi_TileBar2', 'trackPhi_TileGap1',
-        'trackPhi_TileGap2', 'trackPhi_TileGap3', 'trackPhi_TileExt0',
-        'trackPhi_TileExt1', 'trackPhi_TileExt2', 'trackEta_EMB1', 'trackEta_EMB2', 'trackEta_EMB3',
-        'trackEta_EME1', 'trackEta_EME2', 'trackEta_EME3', 'trackEta_HEC0',
-        'trackEta_HEC1', 'trackEta_HEC2', 'trackEta_HEC3', 'trackEta_TileBar0',
-        'trackEta_TileBar1', 'trackEta_TileBar2', 'trackEta_TileGap1',
-        'trackEta_TileGap2', 'trackEta_TileGap3', 'trackEta_TileExt0',
-        'trackEta_TileExt1', 'trackEta_TileExt2', "nTrack", 'trackMass', 'trackEta', 'trackPhi', 'trackPt', 'trackP',
-        'cluster_cell_hitsTruthIndex', 'cluster_cell_hitsTruthE', 'truthPartE', 'truthPartPt', 'truthPartEta', 'truthPartPhi']
-    
 
     for i, rho_file in enumerate(rho_files):
         # load event tree to numpy arrays
