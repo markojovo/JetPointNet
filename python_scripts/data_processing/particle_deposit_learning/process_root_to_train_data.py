@@ -16,8 +16,32 @@ LOG_ENERGY_MEAN = -1 # unrounded mean is ~ -0.93
 LOG_MEAN_TRACK_MOMETUM = 2
 
 def process_events(args):
-    event_root_data, preprocessed, preprocessed_filename, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue = args
+    event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue = args
     
+    decay_group = {
+        "delta+_p": 0,
+        "delta+_n": 1,
+        "delta0_n": 2,
+        "delta0_p": 3,
+        "delta++": 4,
+        "delta-": 5,
+    }   
+
+    part_deposit_type_class = {
+        "track_of_interest": 0,
+        "other_tracked": 1,
+        "pi0": 2,
+        "other_neutral": 3,
+    }
+
+    particle_to_pdgid = {
+        "proton": 2212,
+        "neutron": 2112,
+        "delta++": 2224,
+        "delta+": 2214,
+        "delta0": 2114,
+        "delta-": 1114
+    }     
     if not preprocessed:
         # load file_len sized chunk of root file, starting at event_start_idx to process into one file
         for events_arr in event_root_data.iterate(features_of_interest, step_size=file_len, entry_start=event_start_idx, entry_stop=(event_start_idx + file_len), library="np"):
@@ -33,7 +57,7 @@ def process_events(args):
             # aggregate the data with the cluster it is in
             events_arr["clus_idx"] = []
             events_arr["clus_em_prob"] = []
-            for event_idx, event_clus_cell_E in enumerate(events_arr["cluster_cell_ID"]):
+            for event_idx, event_clus_cell_E in enumerate(events_arr["cluster_cell_E"]):
                 events_arr["clus_idx"].append([])
                 events_arr["clus_em_prob"].append([])
                 for clus_idx, clus_cell_E in enumerate(event_clus_cell_E):
@@ -77,8 +101,9 @@ def process_events(args):
             for key in cellwise_data_keys:
                 cellwise_data_unique[key + "_unique"] = []
 
+            num_events = len(events_arr["cluster_cell_ID"])
             # for every event remove the repeat 
-            for event_idx in np.arange(len(events_arr["cluster_cell_ID"])):
+            for event_idx in np.arange(num_events):
                 # get the idx of the unique cell IDs
                 unique_events_cells_IDs, unique_cells_idx = np.unique(events_arr["cluster_cell_ID"][event_idx], return_index=True)
 
@@ -91,49 +116,40 @@ def process_events(args):
 
             # if Delta dataset add feature of decay group to events_arr
             if dataset == "delta":
-                class DecayGroup():
-                    DELTA_PLUS_PI0 = 1
-                    DELTA_PLUS_PIPM = 2
-                    DELTA_0_PI0_N = 3
-                    DELTA_0_PIPM_P = 4
-                    DELTA_PLUS_PLUS = 5
-                    DELTA_MIN = 6
-                                
-                class PartDepositType():
-                    TRACK_OF_INTEREST = 1
-                    OTHER_TRACKED = 2
-                    PI0 = 3
-                    OTHER_NEUTRAL = 4                                                                                                                                                                                                                                                                                             
+                                                                                                                                                                                                                                                                                      
 
                 # label events with their decay group
                 truthPartPdgIds = events_arr["truthPartPdgId"]
-                decay_group_cuts = {
-                    1: (truthPartPdgIds[:, 0] == 2214) & (truthPartPdgIds[:, 2] == 111),
-                    2: (truthPartPdgIds[:, 0] == 2214) & (truthPartPdgIds[:, 2] == 211),
-                    3: (truthPartPdgIds[:, 0] == 2114) & (truthPartPdgIds[:, 1] == 2112),
-                    4: (truthPartPdgIds[:, 0] == 2114) & (truthPartPdgIds[:, 1] == 2212),
-                    5: (truthPartPdgIds[:, 0] == 2224),
-                    6: (truthPartPdgIds[:, 0] == 1114),
-                }
 
-                events_arr["decay_group"] = np.zeros(len(events_arr["nTrack"])) # [decay_group_cuts["delta_plus_pi0"]] = 0
-                events_arr["decay_group"][decay_group_cuts[DecayGroup.DELTA_PLUS_PI0]] = DecayGroup.DELTA_PLUS_PI0
-                events_arr["decay_group"][decay_group_cuts[DecayGroup.DELTA_PLUS_PIPM]] = DecayGroup.DELTA_PLUS_PIPM
-                events_arr["decay_group"][decay_group_cuts[DecayGroup.DELTA_0_PI0_N]] = DecayGroup.DELTA_0_PI0_N
-                events_arr["decay_group"][decay_group_cuts[DecayGroup.DELTA_0_PIPM_P]] = DecayGroup.DELTA_0_PIPM_P
-                events_arr["decay_group"][decay_group_cuts[DecayGroup.DELTA_PLUS_PLUS]] = DecayGroup.DELTA_PLUS_PLUS
-                events_arr["decay_group"][decay_group_cuts[DecayGroup.DELTA_MIN]] = DecayGroup.DELTA_MIN
+                truthPartPdgIds_idx_0 = truthPartPdgIds[:, 0] # delta id
+                truthPartPdgIds_idx_1 = truthPartPdgIds[:, 1] # proton/neutron id
+
+                decay_group_cuts = {
+                    "delta+_p": (truthPartPdgIds_idx_0 == particle_to_pdgid["delta+"]) & (truthPartPdgIds_idx_1 == particle_to_pdgid["proton"]),
+                    "delta+_n": (truthPartPdgIds_idx_0 == particle_to_pdgid["delta+"]) & (truthPartPdgIds_idx_1 == particle_to_pdgid["neutron"]),
+                    "delta0_n": (truthPartPdgIds_idx_0 == particle_to_pdgid["delta0"]) & (truthPartPdgIds_idx_1 == particle_to_pdgid["neutron"]),
+                    "delta0_p": (truthPartPdgIds_idx_0 == particle_to_pdgid["delta0"]) & (truthPartPdgIds_idx_1 == particle_to_pdgid["proton"]),
+                    "delta++": (truthPartPdgIds_idx_0 == particle_to_pdgid["delta++"]),
+                    "delta-": (truthPartPdgIds_idx_0 == particle_to_pdgid["delta-"]),
+                }
+                
+                # label each event with its decay group class
+                events_arr["decay_group"] = np.zeros(num_events)
+                for decay_group_name, decay_cut in decay_group_cuts.items():
+                    events_arr["decay_group"][decay_cut] = decay_group[decay_group_name]
+                    
 
             event_data = events_arr
 
             print("DONE PREPROCESSING file", file_idx)
 
             # save preprocessed event data flattened to events
-            file_name = file_name + '_len_' + str(file_len) + '_i_' + str(int(file_idx)) + '.npz'
+            file_name = file_name + '_len_' + str(file_len) + '_i_' + str(int(file_idx))
             np.save(save_dir + dataset + "_processed_test_files/" + file_name, event_data)
 
     else:
-        np.load(preprocessed_file_name, allow_pickle=True).item()
+        event_data = np.load(save_dir + dataset + "_processed_test_files/" + preprocessed_file_name, allow_pickle=True).item()
+        file_name = "delta_full_tracked_" + "_".join(preprocessed_file_name.split("_")[2:6])
 
 
     # cluster data dict to look up data by feature name
@@ -158,10 +174,11 @@ def process_events(args):
     for event_idx in range(num_events):
         num_tracks = event_data["nTrack"][event_idx]
 
-        if (dataset == "delta" and (len(events_arr["cluster_cell_ID"][event_idx]) and (((events_arr["decay_group"][event_idx] == DecayGroup.DELTA_PLUS_PI0 or events_arr["decay_group"][event_idx] == DecayGroup.DELTA_PLUS_PIPM or events_arr["decay_group"][event_idx] == DecayGroup.DELTA_MIN) and num_tracks == 1) or \
-        (events_arr["decay_group"][event_idx] == DecayGroup.DELTA_0_PI0_N and num_tracks == 0) or \
-        ((events_arr["decay_group"][event_idx] == DecayGroup.DELTA_PLUS_PLUS or events_arr["decay_group"][event_idx] == DecayGroup.DELTA_0_PIPM_P) and num_tracks == 2)))) \
-        or (dataset == "rho" and num_tracks == 1):
+        if (len(event_data["cluster_cell_ID"][event_idx]) and \
+        (dataset == "delta" and (((num_tracks == 1) and (event_data["decay_group"][event_idx] == decay_group["delta+_p"] or event_data["decay_group"][event_idx] == decay_group["delta+_n"] or event_data["decay_group"][event_idx] == decay_group["delta-"])) or \
+        #((num_tracks == 0) and event_data["decay_group"][event_idx] == decay_group["delta0_n"]) or \ # drop delta0->n+pi0 events
+        ((num_tracks == 2) and (event_data["decay_group"][event_idx] == decay_group["delta0_p"] or event_data["decay_group"][event_idx] == decay_group["delta++"])))) \
+        or (dataset == "rho" and num_tracks == 1)):
             
             if num_tracks > 0:
                 x_tracks = []
@@ -221,7 +238,6 @@ def process_events(args):
             
 
             cell_IDs = event_data['cluster_cell_ID'][event_idx]
-            num_cells = len(cell_IDs)
             cell_IDs = cell_IDs
             cell_ID_map = sorter[np.searchsorted(cell_geo_ID, cell_IDs, sorter=sorter)]
 
@@ -238,34 +254,40 @@ def process_events(args):
             thetas = [2*np.arctan(np.exp(-eta)) for eta in node_features["cell_geo_eta"]]
             x, y, z = spherical_to_cartesian(node_features["cell_geo_rPerp"], node_features["cell_geo_phi"], thetas)
 
-            # label cells
+            # label cells (4 classes)
+            # all decay groups only have 2 types particles depositing energy, a proton/neutron and a pion
             if dataset == "delta":
-                if event_data["decay_group"][event_idx] == DecayGroup.DELTA_PLUS_PI0:
-                    class_part_idx_1 = 0
-                    class_part_idx_not_1 = 2
-                elif event_data["decay_group"][event_idx] == DecayGroup.DELTA_PLUS_PIPM or event_data["decay_group"][event_idx] == DecayGroup.DELTA_MIN:
-                    class_part_idx_1 = 3
-                    class_part_idx_not_1 = 0
-                elif event_data["decay_group"][event_idx] == DecayGroup.DELTA_0_PI0_N:
-                    class_part_idx_1 = 3
-                    class_part_idx_not_1 = 2
-                elif event_data["decay_group"][event_idx] == DecayGroup.DELTA_PLUS_PLUS or event_data["decay_group"][event_idx] == DecayGroup.DELTA_0_PIPM_P:
-                    class_part_idx_1 = 3
-                    class_part_idx_not_1 = 0
+                class_part_idx_1 = 0
+                class_part_idx_not_1 = 0
+
+                if event_data["decay_group"][event_idx] == decay_group["delta+_p"]:
+                    class_part_idx_1 = part_deposit_type_class["track_of_interest"] # proton
+                    class_part_idx_not_1 = part_deposit_type_class["pi0"] # pi0
+                elif event_data["decay_group"][event_idx] == decay_group["delta+_n"] or event_data["decay_group"][event_idx] == decay_group["delta-"]:
+                    class_part_idx_1 = part_deposit_type_class["other_neutral"] # neutron
+                    class_part_idx_not_1 = part_deposit_type_class["track_of_interest"] # pi+/-
+                elif event_data["decay_group"][event_idx] == decay_group["delta0_n"]:
+                    class_part_idx_1 = part_deposit_type_class["other_neutral"] # neutron
+                    class_part_idx_not_1 = part_deposit_type_class["pi0"] # pi0
+                # if decay is delta++ or delta0_p then set labels elsewhere (since 2 tracks)
+
                 # get all cells with particle idx 1 (proton/neutron)
                 cut_part_idx_1_deposits = (ak.Array(event_data["cluster_cell_hitsTruthIndex"][event_idx]) == 1)
                 # get fraction of energy from the proton/neutron (always p/n in a rho event - it deposits some energy and the pion deposits the remaining)
                 frac_cell_energy_from_part_idx_1 = ak.sum(ak.Array(event_data["cluster_cell_hitsTruthE"][event_idx])[cut_part_idx_1_deposits], axis=1) / ak.sum(event_data["cluster_cell_hitsTruthE"][event_idx], axis=1)
-
+                # if frac_cell_energy_from_part_idx_1 < 0.5 set label class_part_idx_not_1 else set cell label to class_part_idx_1
                 cell_part_deposit_labels = [class_part_idx_not_1 if cell_frac_cell_energy_from_part_idx_1 < 0.5 else class_part_idx_1 for cell_frac_cell_energy_from_part_idx_1 in frac_cell_energy_from_part_idx_1]
 
+            # only pi0 and pi+/- depositing energy -> binary classification
             elif dataset == "rho":
-                frac_pi0_energy = ak.sum(events_arr["cluster_cell_hitsTruthE"][event_idx][events_arr["cluster_cell_hitsTruthIndex"][event_idx] != 1], axis=1)/ak.sum(events_arr["cluster_cell_hitsTruthE"][event_idx], axis=1)
-                cell_part_deposit_labels = frac_pi0_energy > 0.5
+                # if the pi0 deposits the majority of the energy label cell 1 else if pi+/- deposits majority label cell 0
+                frac_pi0_energy = ak.sum(event_data["cluster_cell_hitsTruthE"][event_idx][event_data["cluster_cell_hitsTruthIndex"][event_idx] != 1], axis=1)/ak.sum(event_data["cluster_cell_hitsTruthE"][event_idx], axis=1)
+                cell_part_deposit_labels = 1 if frac_pi0_energy > 0.5 else 0
 
 
             # if the particle has 2 tracks match the track to the particle closest & threshold that they must be close enough together
-            dist_track_part_thresh = 1
+            # for delta dataset either delta++ -> proton + pi+/- or delta0 -> proton + pi+/-
+            track_part_dist_thresh = 1
             if num_tracks == 2:
 
                 part1_idx = 1 # proton
@@ -293,11 +315,11 @@ def process_events(args):
                 part2_track2_dist = measure_track_part_dists(track2_phi, track2_eta, track2_pt, part2_phi, part2_eta, part2_pt)
 
                 # either pair part1 with track1 and part2 with track2 or part1 with track2 and part2 with track1
-                # or discard event if no pairing exists with all dists < thresh
-                paring_one_sum_dist = part1_track1_dist + part2_track2_dist if part1_track1_dist < dist_track_part_thresh and part2_track2_dist < dist_track_part_thresh else 2*dist_track_part_thresh
-                paring_two_sum_dist = part1_track2_dist + part2_track1_dist if part1_track1_dist < dist_track_part_thresh and part2_track2_dist < dist_track_part_thresh else 2*dist_track_part_thresh
+                # or discard event if no pairing exists with both track-part dists < thresh
+                paring_one_sum_dist = part1_track1_dist + part2_track2_dist if part1_track1_dist < track_part_dist_thresh and part2_track2_dist < track_part_dist_thresh else 2*track_part_dist_thresh
+                paring_two_sum_dist = part1_track2_dist + part2_track1_dist if part1_track1_dist < track_part_dist_thresh and part2_track2_dist < track_part_dist_thresh else 2*track_part_dist_thresh
                 
-                if max(paring_one_sum_dist, paring_two_sum_dist) >= 2*dist_track_part_thresh:
+                if max(paring_one_sum_dist, paring_two_sum_dist) >= 2*track_part_dist_thresh:
                     num_tracks = 0
                 else:
                     if paring_one_sum_dist < paring_two_sum_dist:
@@ -306,7 +328,7 @@ def process_events(args):
                         pairing_one = False
 
             track_idx = 0
-            execute_once = True
+            added_one_sample = False # for each event add one sample to dataset
 
             non_null_tracks = np.array(flatten_one_layer(non_null_tracks))
             x_tracks = np.array(flatten_one_layer(x_tracks))
@@ -317,13 +339,15 @@ def process_events(args):
             y_tracks[~non_null_tracks] = 0
             z_tracks[~non_null_tracks] = 0
 
+            cell_has_E_deposit = ak.sum(event_data["cluster_cell_hitsTruthE"][event_idx], axis=1) > 0
+            num_cells = len(cell_E[cell_has_E_deposit])
             
             # execute once for 0-1 track, and 2 times for 2 tracks
-            while execute_once or track_idx < num_tracks:
-                processed_event_data["cell_E"].append(cell_E)
-                processed_event_data["x"].append(x)
-                processed_event_data["y"].append(y)
-                processed_event_data["z"].append(z)     
+            while not added_one_sample or track_idx < num_tracks:
+                processed_event_data["cell_E"].append(cell_E[cell_has_E_deposit])
+                processed_event_data["x"].append(x[cell_has_E_deposit])
+                processed_event_data["y"].append(y[cell_has_E_deposit])
+                processed_event_data["z"].append(z[cell_has_E_deposit])     
 
                 if dataset == "delta":
                     track_classes = np.zeros((2, NUM_TRACK_POINTS))
@@ -333,15 +357,13 @@ def process_events(args):
                     track_Ps = np.zeros((1, NUM_TRACK_POINTS))
                         
                 if num_tracks == 2:
-                    # set track_idx to be the track of interest
+                    # set track_idx to be the track of interest (for track idx 0 track 0 is of interest, else track 1)
                     if track_idx == 0:
                         track_classes[0] = np.ones(NUM_TRACK_POINTS)
                         track_classes[1] = np.full(NUM_TRACK_POINTS, 2)
                     else:
                         track_classes[1] = np.ones(NUM_TRACK_POINTS)
                         track_classes[0] = np.full(NUM_TRACK_POINTS, 2)
-
-                    #print("track_classes:", track_classes)
 
                     if (pairing_one and track_idx == 0) or (not pairing_one and track_idx == 1): # pair track 0 and part 1
                         class_part_idx_1 = 0 # track of interest
@@ -351,11 +373,10 @@ def process_events(args):
                         class_part_idx_1 = 1
                         class_part_idx_not_1 = 0
 
-
                     cell_part_deposit_labels = [class_part_idx_not_1 if cell_frac_cell_energy_from_part_idx_1 < 0.5 else class_part_idx_1 for cell_frac_cell_energy_from_part_idx_1 in frac_cell_energy_from_part_idx_1]
                     #print("cell_labels:", cell_labels)
-                    track_1_P =  np.log10((events_arr["trackP"][event_idx][0])) - LOG_ENERGY_MEAN
-                    track_2_P =  np.log10((events_arr["trackP"][event_idx][1])) - LOG_ENERGY_MEAN
+                    track_1_P =  np.log10((event_data["trackP"][event_idx][0])) - LOG_ENERGY_MEAN
+                    track_2_P =  np.log10((event_data["trackP"][event_idx][1])) - LOG_ENERGY_MEAN
                     track_Ps[0] = np.full(NUM_TRACK_POINTS, track_1_P)
                     track_Ps[1] = np.full(NUM_TRACK_POINTS, track_2_P)
                 
@@ -373,7 +394,7 @@ def process_events(args):
                 
                 # else no tracks => Pt = 0
 
-                processed_event_data["cell_part_deposit_labels"].append(cell_part_deposit_labels)
+                processed_event_data["cell_part_deposit_labels"].append(np.array(cell_part_deposit_labels)[cell_has_E_deposit])
 
                 processed_event_track_data["x"].append(x_tracks)
                 processed_event_track_data["y"].append(y_tracks)
@@ -383,11 +404,11 @@ def process_events(args):
                 # track classes - 0 => point, 1 => track of interest, 2 => other track
                 processed_event_track_data["track_classes"].append(np.array(track_classes))
                 
-                if num_cells + NUM_TRACK_POINTS > max_cells:
+                if num_cells + NUM_TRACK_POINTS*max_num_tracks > max_cells:
                     max_cells = num_cells + NUM_TRACK_POINTS*max_num_tracks
 
                 num_events_saved += 1
-                execute_once = False
+                added_one_sample = True
                 track_idx += 1
 
     # save all event data
@@ -401,12 +422,13 @@ def process_events(args):
 
 
     for idx in range(num_events_saved):
-        num_points = len(processed_event_data["x"][idx]) + NUM_TRACK_POINTS*max_num_tracks
+        num_points = len(processed_event_data["cell_part_deposit_labels"][idx]) + NUM_TRACK_POINTS*max_num_tracks
         # labels points as point (0), track of interest (1), or other track (2)
         type_of_point_labels = np.zeros(num_points)
         type_of_point_labels[-NUM_TRACK_POINTS*max_num_tracks:] = processed_event_track_data["track_classes"][idx]
 
         event_point_data = np.concatenate(([np.concatenate((processed_event_data[file_feature][idx], processed_event_track_data[track_features[i]][idx]), -1)  for i, file_feature in enumerate(file_features)], [type_of_point_labels]), 0)
+
 
         point_data[idx, :num_points] = np.transpose(event_point_data)
         point_label[idx, :num_points] = np.transpose([np.concatenate((processed_event_data["cell_part_deposit_labels"][idx], np.full(NUM_TRACK_POINTS*max_num_tracks, -1)))]) # label all tracks as -1
@@ -461,11 +483,11 @@ if __name__ == "__main__":
     if preprocessed:
         event_root_data = "null"
         event_start_idx = "null"
-        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_filename, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue) for preprocessed_file_name in preprocessed_file_names])
+        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue) for preprocessed_file_name in preprocessed_file_names])
     else:
         event_root_data = uproot.open(events_root_file)["EventTree"]
-        preprocessed_filename = "null"
-        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_filename, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue) for event_start_idx in starting_event_idxs])
+        preprocessed_file_name = "null"
+        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue) for event_start_idx in starting_event_idxs])
 
     # as files are processed and the max num points are added to queue on completion, compare with current max 
     while not max_points_queue.empty():

@@ -4,7 +4,7 @@ import yaml
 import uproot
 import math
 import multiprocessing
-from utils.dataprocessing_util import *
+from PointNet_Segmentation.utils.data_processing_util import *
 
 def get_args():
     parser = argparse.ArgumentParser()

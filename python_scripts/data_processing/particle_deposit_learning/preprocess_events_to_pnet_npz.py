@@ -8,7 +8,7 @@ import awkward as ak
 import multiprocessing
 import vector
 from utils.track_metadata import *
-from utils.dataprocessing_util import *
+from PointNet_Segmentation.utils.data_processing_util import *
 
 
 LOG_ENERGY_MEAN = -1 # unrounded mean is ~ -0.93

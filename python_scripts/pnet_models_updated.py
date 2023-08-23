@@ -283,8 +283,8 @@ def tnet(inputs: tf.Tensor, num_features: int, name: str, input_points, mask: tf
     return layers.Dot(axes=(2, 1), name=f"{name}_mm")([inputs, transformed_features])
 
 
-def pnet_part_seg_no_tnets(num_points: int) -> keras.Model:
-    input_points = keras.Input(shape=(None, 6))
+def pnet_part_seg_no_tnets(num_points: int, num_feat: int, num_classes: int) -> keras.Model:
+    input_points = keras.Input(shape=(None, num_feat))
     full_mask = tf.logical_not(tf.math.equal(input_points, 0))
     mask = tf.experimental.numpy.any(full_mask, axis=-1)
 
@@ -325,9 +325,9 @@ def pnet_part_seg_no_tnets(num_points: int) -> keras.Model:
     segmentation_features_128 = t_dist_block(dropout_1,  128, name="segmentation_features_128")
     dropout_2 = layers.Dropout(rate=.2)(segmentation_features_128)
     """
-    last_dense = layers.Dense(1)
-    last_time = layers.TimeDistributed(last_dense,name='last_tdist')(segmentation_features)
-    outputs = layers.Activation('sigmoid', name="last_act")(last_time)
+    last_dense = layers.Dense(num_classes)
+    last_time = layers.TimeDistributed(last_dense, name='last_tdist')(segmentation_features)
+    outputs = layers.Activation('softmax', name="last_act")(last_time)
 
     return keras.Model(input_points, outputs)
 
@@ -431,6 +431,7 @@ def cast_to_zero(tensors):
     reduced_mask = tf.expand_dims(reduced_mask, axis=-1)
     return_tens = tf.math.multiply(mod_input, reduced_mask)
     return return_tens
+    
 
 def tdist_block(x, mask, size: int, number: str):
     dense = layers.Dense(size)
