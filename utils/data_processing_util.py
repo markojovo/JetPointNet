@@ -46,3 +46,29 @@ features_of_interest = ["eventNumber", "nCluster", "truthPartE", "truthPartPt", 
         'trackEta_TileGap2', 'trackEta_TileGap3', 'trackEta_TileExt0',
         'trackEta_TileExt1', 'trackEta_TileExt2', "nTrack", 'trackMass', 'trackEta', 'trackPhi', 'trackPt', 'trackP',
         'cluster_cell_hitsTruthIndex', 'cluster_cell_hitsTruthE', 'truthPartE', 'truthPartPt', 'truthPartEta', 'truthPartPhi']
+
+
+decay_group = {
+    "delta+_p": 0,
+    "delta+_n": 1,
+    "delta0_n": 2,
+    "delta0_p": 3,
+    "delta++": 4,
+    "delta-": 5,
+}   
+
+part_deposit_type_class = {
+    "track_of_interest": 0,
+    "other_tracked": 1,
+    "pi0": 2,
+    "other_neutral": 3,
+}
+
+particle_to_pdgid = {
+    "proton": 2212,
+    "neutron": 2112,
+    "delta++": 2224,
+    "delta+": 2214,
+    "delta0": 2114,
+    "delta-": 1114
+}         

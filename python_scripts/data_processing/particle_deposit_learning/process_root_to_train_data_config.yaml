@@ -3,10 +3,17 @@ preprocessed: True
 dataset: "delta"
 file_len: 6000
 starting_event_idx: 0
-num_files_to_process: 64
+num_files_to_process: 63
 save_dir: "/fast_scratch_1/jbohm/cell_particle_deposit_learning/delta/"
 num_procs: 32
 
 preprocessed_file_name: "delta_full"
-i_low: 0
-i_high: 64
+i_low: 0 # 0 # 65 # 74 #76 # 82 # 110 # 130 # 132 # 154 # 164
+i_high: 64 # 64  #72 # 74 # 80 #  108 # 128 # 130 # 134 # 154 # 164
+
+include_delta_p_pi0: False
+include_delta_n_pi0: False
+include_delta_n_pipm: False
+include_delta_p_pipm: True
+
+niche_case: "none" #"1_track_1_n_3_pi0"

@@ -1,4 +1,0 @@
-rho_files: ["/fast_scratch_1/jbohm/cell_particle_deposit_learning/delta_root_files/delta_full.root"]
-save_dir: /fast_scratch_1/jbohm/cell_particle_deposit_learning/delta_npy_files
-num_procs: 32
-file_len: 6000

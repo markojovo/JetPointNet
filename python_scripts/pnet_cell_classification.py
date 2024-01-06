@@ -8,7 +8,7 @@ import math
 import numpy as np
 import glob
 import csv
-from pnet_models_updated import pnet_part_seg_no_tnets, pnet_part_seg
+from utils.pnet_models import pnet_part_seg_no_tnets, pnet_part_seg
 
 ## IMPORTANT ## ====== ## DISABLE EAGER EXECUTION WITH TensorFlow!! ##
 print()

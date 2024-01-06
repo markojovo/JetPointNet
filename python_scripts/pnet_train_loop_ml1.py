@@ -46,8 +46,7 @@ import csv
 import sys
 #sys.path.append(module_path)
 import PointNet_Segmentation.utils.deep_set_util as dsu
-import pnet_models
-from pnet_models_updated import PointNet_gamma_no_tnet, part_segmentation_model, part_segmentation_model_propagate_mask, PointNet_omicron, PointNet_delta, PointNet_gamma
+from utils.pnet_models import PointNet_gamma_no_tnet, part_segmentation_model, part_segmentation_model_propagate_mask, PointNet_omicron, PointNet_delta, PointNet_gamma
 
 ## TensorFlow
 #======================================
