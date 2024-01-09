@@ -13,5 +13,5 @@ First train was on rho dataset with:
 
 
 More up-to-date training scripts and analysis for delta dataset:
-* Train script https://github.com/jessicabohm/PointNet_Segmentation/blob/python_scripts/train_pnet_delta.py or notebook https://github.com/jessicabohm/PointNet_Segmentation/blob/python_scripts/train_pnet_delta.ipynb
-* Analysis of delta train is in https://github.com/jessicabohm/PointNet_Segmentation/blob/nbs/particle_deposit_learning/delta/delta_train_analysis.ipynb
+* Train script https://github.com/jessicabohm/PointNet_Segmentation/blob/ml1_train/python_scripts/train_pnet_delta.py or notebook https://github.com/jessicabohm/PointNet_Segmentation/blob/ml1_train/python_scripts/train_pnet_delta.ipynb
+* Analysis of delta train is in https://github.com/jessicabohm/PointNet_Segmentation/blob/ml1_train/nbs/particle_deposit_learning/delta/delta_train_analysis.ipynb
