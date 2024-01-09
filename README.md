@@ -3,7 +3,7 @@
 
 <h3>Data processing:</h3>
 
-Processing outlined in https://github.com/jessicabohm/PointNet_Segmentation/blob/python_scripts/data_processing/particle_deposit_learning/README.md
+Processing outlined in https://github.com/jessicabohm/PointNet_Segmentation/tree/ml1_train/python_scripts/data_processing/particle_deposit_learning
 
 <h3>Training model:</h3>
 
