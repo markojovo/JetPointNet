@@ -25,7 +25,17 @@ def measure_track_part_dists(track_phi, track_eta, track_p, part_phi, part_eta, 
     return np.array(part_vectors.deltaR(track_vectors))
 
 def flatten_one_layer(data):
-    return [data_layer2 for data_layer1 in data for data_layer2 in data_layer1]
+    flattened = []
+    for data_layer1 in data:
+        if isinstance(data_layer1, list) or isinstance(data_layer1, np.ndarray):
+            flattened.extend(data_layer1)
+        else:
+            flattened.append(data_layer1)
+    return flattened
+
+#def flatten_one_layer(data):
+#    print(data)
+#    return [data_layer2 for data_layer1 in data for data_layer2 in data_layer1]
 
 def get_args():
     parser = argparse.ArgumentParser()
