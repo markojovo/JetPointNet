@@ -1,10 +1,10 @@
-events_root_file: "/fast_scratch_1/jbohm/cell_particle_deposit_learning/delta/delta_root_files/delta_full.root"
+events_root_file: "/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho/rho_root_files/rho_full.root"
 preprocessed: True
-dataset: "delta"
+dataset: "rho"
 file_len: 6000
 starting_event_idx: 0
 num_files_to_process: 63
-save_dir: "/fast_scratch_1/jbohm/cell_particle_deposit_learning/delta/"
+save_dir: "/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho/"
 num_procs: 32
 
 preprocessed_file_name: "delta_full"
@@ -17,3 +17,5 @@ include_delta_n_pipm: False
 include_delta_p_pipm: True
 
 niche_case: "none" #"1_track_1_n_3_pi0"
+
+regression: True
