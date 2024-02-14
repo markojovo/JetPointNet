@@ -7,6 +7,9 @@ import awkward as ak
 import multiprocessing
 import vector
 
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
 sys.path.append("/home/mjovanovic/Work/PointNet_Segmentation")
 from utils.track_metadata import *
 from utils.data_processing_util import *
@@ -17,7 +20,7 @@ LOG_MEAN_TRACK_MOMETUM = 2
 
 def process_events(args):
     event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case, regression = args
-    
+    print(f"Processing: {preprocessed_file_name}...")
     decay_group = {
         "delta+_p": 0,
         "delta+_n": 1,
@@ -149,7 +152,7 @@ def process_events(args):
             np.save(save_dir + dataset + "_processed_test_files/" + file_label + file_details, event_data)
 
     else:
-        event_data = np.load(save_dir + dataset + "_processed_test_files/" + preprocessed_file_name[:-8] + ".npy", allow_pickle=True).item()
+        event_data = np.load(save_dir + dataset + "_processed_test_files/" + preprocessed_file_name[:-8] + ".npz.npy", allow_pickle=True).item()
         file_label = "_".join(preprocessed_file_name.split("_")[:1])
         file_details = "_".join(preprocessed_file_name.split("_")[2:6])
 
@@ -458,11 +461,11 @@ def process_events(args):
                 
                 if num_cells + NUM_TRACK_POINTS*max_num_tracks > max_cells:
                     max_cells = num_cells + NUM_TRACK_POINTS*max_num_tracks
-
-                if event_data["decay_group"][event_idx] == decay_group["delta+_p"]:
-                    tot_p_pi0 += 1
-                elif event_data["decay_group"][event_idx] == decay_group["delta+_n"] or event_data["decay_group"][event_idx] == decay_group["delta-"]:
-                    tot_n_pipm += 1
+                if not dataset == "rho":
+                    if event_data["decay_group"][event_idx] == decay_group["delta+_p"]:
+                        tot_p_pi0 += 1
+                    elif event_data["decay_group"][event_idx] == decay_group["delta+_n"] or event_data["decay_group"][event_idx] == decay_group["delta-"]:
+                        tot_n_pipm += 1
 
                 num_events_saved += 1
                 added_one_sample = True
@@ -492,7 +495,7 @@ def process_events(args):
 
     file_path = save_dir + dataset + "_processed_train_files/" + file_name.split(".")[0]
     if(True): # TODO: update
-        np.savez(file_path, X=point_data, Y=point_label, cell_weights=processed_event_data["cell_weights"])
+        np.savez(file_path, X=point_data, Y=point_label)#, cell_weights=processed_event_data["cell_weights"])
     else:    
         np.savez(file_path, X=point_data, Y=point_label)
 
@@ -551,14 +554,15 @@ if __name__ == "__main__":
     starting_event_idxs = [file_len*batch_idx + starting_event_idx for batch_idx in range(num_files_to_process)]
     preprocessed_file_names = list(map(lambda i:  preprocessed_file_name + "_len_" + str(file_len) + "_i_" + str(i) + ".npz.npy", np.arange(i_low, i_high + 1)))
 
+    print("Starting processing...")
     if preprocessed:
         event_root_data = "null"
         event_start_idx = "null"
-        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case) for preprocessed_file_name in preprocessed_file_names])
+        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case, regression) for preprocessed_file_name in preprocessed_file_names])
     else:
         event_root_data = uproot.open(events_root_file)["EventTree"]
         preprocessed_file_name = "null"
-        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case) for event_start_idx in starting_event_idxs])
+        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case, regression) for event_start_idx in starting_event_idxs])
 
     # as files are processed and the max num points are added to queue on completion, compare with current max 
     while not max_points_queue.empty():

@@ -7,7 +7,7 @@ import uproot
 import awkward as ak
 import multiprocessing
 
-sys.path.append('/home/jbohm/start_tf/LCStudies')
+sys.path.append('/home/mjovanovic/Work/LCStudies')
 
 LOG_ENERGY_MEAN = -1 # unrounded mean is ~ 0.93
 

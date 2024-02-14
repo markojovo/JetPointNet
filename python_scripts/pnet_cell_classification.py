@@ -1,14 +1,19 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "5" # SET GPU
 import tensorflow as tf
 from tensorflow import keras
-from keras import layers
-import keras.backend as K
+from tensorflow.keras import layers
 import math
 import numpy as np
 import glob
 import csv
+import sys
+sys.path.append('/home/mjovanovic/Work/PointNet_Segmentation')
 from utils.pnet_models import pnet_part_seg_no_tnets, pnet_part_seg
+import awkward as ak
+
+
+os.environ['CUDA_VISIBLE_DEVICES'] = "7" # SET GPU
+
 
 ## IMPORTANT ## ====== ## DISABLE EAGER EXECUTION WITH TensorFlow!! ##
 print()
@@ -21,22 +26,22 @@ MEAN_TRACK_LOG_ENERGY = 2.4
 
 
 # DATA AND OUTPUT DIRS
-data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1'
-output_dir = "/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1/tr_50_val_5_tst_5_lr_1e-2_BS_100_no_tnets_1_track_add_min_dist_cut_track_pipm_delta_R_lt_0.1"
-max_points_file = '/max_points_1_track.txt'
+data_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho/rho_processed_train_files/'
+output_dir = "/data/mjovanovic/cell_particle_deposit_learning/rho_train/tr_25_val_3_tst_5_rho_2_class_lr_1e-2_BS_100_no_tnets_add_min_dist_REGRESSION"
+max_points_file = '/max_points.txt'
 
-num_train_files = 51 #707
-num_val_files = 5 #210
+num_train_files = 50 #707
+num_val_files = 3 #210
 num_test_files = 5 #10
 events_per_file = 3800
 start_at_epoch = 0 # load start_at_epoch - 1
 add_min_track_dist = True
 
-EPOCHS = 100
+EPOCHS = 25
 BATCH_SIZE = 100
 LEARNING_RATE = 1e-2
 
-train_output_dir = data_dir + '/train_1_track/'
+train_output_dir = data_dir# + '/train_1_track/'
 val_output_dir = data_dir + '/val_1_track/'
 test_output_dir = data_dir + '/test_1_track/'
 
@@ -45,7 +50,7 @@ validate_only = False
 if validate_only:
     model = "tr_68_val_7_tst_5_lr_1e-2_BS_100_no_tnets_1_track_add_min_dist_cut_R_lt_0.1"
     test_set = "test_1_track"
-    data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1/'
+    data_dir = '/data/mjovanovic/cell_particle_deposit_learning/train_dirs/pnet_train_1/'
     output_dir = data_dir + model
     start_at_epoch = 97 # state to load + 1
     BATCH_SIZE = 100
@@ -63,7 +68,7 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
         for file in file_names:
             #print("loaded file")
             point_net_data = np.load(file)
-            #track_pipm_delta_R = np.load("/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_processed_train_files/delta_R/" + "_".join(file.split("/")[-1].split("_")[:-2]) + "_track_pipm_delta_R.npy", allow_pickle=True) # load the noy file instead of npz # 
+            #track_pipm_delta_R = np.load("/data/mjovanovic/cell_particle_deposit_learning/rho_processed_train_files/delta_R/" + "_".join(file.split("/")[-1].split("_")[:-2]) + "_track_pipm_delta_R.npy", allow_pickle=True) # load the noy file instead of npz # 
 
             #print("track cut len", len(track_pipm_delta_R), "events len", len(point_net_data['X']))
 
@@ -115,36 +120,34 @@ def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite
             break
 
 
-# LOSS
-def masked_bce_weighted_pointwise_loss(y_true, y_pred):
-    weights = tf.expand_dims(y_true[:,:,1], -1)
-    y_true = tf.expand_dims(y_true[:,:,0], -1)
-    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
-    return K.sum(tf.multiply(tf.multiply(weights, mask), K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask))), axis=None) / K.sum(mask, axis=None)
 
 def masked_bce_pointwise_loss(y_true, y_pred):
     y_true = tf.expand_dims(y_true[:,:,0], -1)
     mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
-    return K.sum(K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask)), axis=None) / K.sum(mask, axis=None)
+    squared_difference = tf.square(y_true - y_pred)
+    masked_squared_difference = squared_difference * mask
+    masked_loss = tf.reduce_sum(masked_squared_difference) / tf.reduce_sum(mask)
+    return masked_loss
 
+print("WADWADAWDAW")
 train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
 val_files = np.sort(glob.glob(val_output_dir+'*.npz'))[:num_val_files]
 test_files = np.sort(glob.glob(test_output_dir+'*.npz'))[:num_test_files]
 
-num_batches_train = (len(train_files) * events_per_file) / BATCH_SIZE 
-num_batches_val = (len(val_files) * events_per_file) / BATCH_SIZE
+num_batches_train = (len(train_files) * events_per_file) // BATCH_SIZE 
+#num_batches_val = (len(val_files) * events_per_file) / BATCH_SIZE
+num_batches_val = (len(val_files) * events_per_file) // BATCH_SIZE
 num_batches_test = (len(test_files) * events_per_file) / BATCH_SIZE
 
 # load the max number of points (N) - saved to data dir
 with open(data_dir + max_points_file) as f:
     N = int(f.readline())
-
 train_generator = batched_data_generator(train_files, BATCH_SIZE, N, add_min_track_dist=add_min_track_dist)
 val_generator = batched_data_generator(val_files, BATCH_SIZE, N, add_min_track_dist=add_min_track_dist)
 test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
 
 # COMPILE MODEL
-model = pnet_part_seg_no_tnets(N)
+model = pnet_part_seg_no_tnets(N, 6 ,1)
 
 lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     initial_learning_rate=1e-2,
@@ -152,7 +155,7 @@ lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     decay_rate=0.9)
 
 decay_rate = 0.1/5
-opt = keras.optimizers.Adam(learning_rate=LEARNING_RATE)
+opt = tf.keras.optimizers.legacy.Adam(learning_rate=LEARNING_RATE)
 #opt = keras.optimizers.SGD(lr=0.1, momentum=0.8, decay=decay_rate)
 
 model.compile(loss=masked_bce_pointwise_loss, optimizer=opt)
@@ -209,7 +212,8 @@ class SaveEpoch(tf.keras.callbacks.Callback):
         # save loss
         with open(output_dir + "/log_loss.csv" ,'a') as file:
             writer = csv.writer(file)
-            writer.writerow([start_at_epoch + epoch , logs["loss"], logs["val_loss"]])
+            writer.writerow([start_at_epoch + epoch , logs["loss"]])#, logs["val_loss"]])
+print(f"Validation Steps: {num_batches_val}")
 
 history = model.fit(train_generator,
         epochs=EPOCHS,

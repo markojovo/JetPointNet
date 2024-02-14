@@ -1,13 +1,13 @@
-events_root_file: "/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho/rho_root_files/rho_full.root"
-preprocessed: True
+events_root_file: "/data/mjovanovic/cell_particle_deposit_learning/rho/rho_root_files/rho_full.root"
+preprocessed: False
 dataset: "rho"
 file_len: 6000
 starting_event_idx: 0
 num_files_to_process: 63
-save_dir: "/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho/"
-num_procs: 32
+save_dir: "/data/mjovanovic/cell_particle_deposit_learning/rho/"
+num_procs: 16 #32
 
-preprocessed_file_name: "delta_full"
+preprocessed_file_name: "rho_full"
 i_low: 0 # 0 # 65 # 74 #76 # 82 # 110 # 130 # 132 # 154 # 164
 i_high: 64 # 64  #72 # 74 # 80 #  108 # 128 # 130 # 134 # 154 # 164
 

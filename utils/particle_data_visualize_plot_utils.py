@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import sys
 
-sys.path.append('/home/jbohm/start_tf/LCStudies')
+sys.path.append('/home/mjovanovic/Work/LCStudies')
 from  util import graph_util as gu
 
 

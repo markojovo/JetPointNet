@@ -1,7 +1,7 @@
 pipm1_file_nums: [17]
 pipm2_file_nums: [0]
 pi0_file_nums: [0]
-save_dir: /fast_scratch_1/jbohm/train_testing_data/
+save_dir: /data/mjovanovic/train_testing_data/
 len_file: 6000
 i_low: 0
 i_high: 65

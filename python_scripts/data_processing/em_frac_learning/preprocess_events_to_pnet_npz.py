@@ -7,7 +7,7 @@ import uproot
 import awkward as ak
 import multiprocessing
 
-sys.path.append('/home/jbohm/start_tf/LCStudies')
+sys.path.append('/home/mjovanovic/Work/LCStudies')
 
 LOG_ENERGY_MEAN = -1 # unrounded mean is ~ -0.93
 LOG_MEAN_TRACK_MOMETUM = 2
@@ -350,9 +350,9 @@ def process_file(args):
                     point_label[idx, :len_cluster] = np.transpose([processed_event_data["truth_EM_frac"][idx]])
 
         if rho_events:
-            file_path = "/fast_scratch_1/jbohm/train_testing_data/rho_files/rho_small.npz"
+            file_path = "/data/mjovanovic/train_testing_data/rho_files/rho_small.npz"
         else:
-            file_path = save_dir + file_type + file_name.split(".")[0] + ('_charged' if not mixed_pions else '') + '_1_track.npz' #"/fast_scratch_1/jbohm/train_testing_data/rho_files/rho_small.npz"
+            file_path = save_dir + file_type + file_name.split(".")[0] + ('_charged' if not mixed_pions else '') + '_1_track.npz' #"/data/mjovanovic/train_testing_data/rho_files/rho_small.npz"
         np.savez(file_path, X=point_data, Y=point_label)
 
     max_points_queue.put(max_cells)
@@ -385,9 +385,9 @@ if __name__ == "__main__":
     add_3_min_dists_and_layer = config["add_3_min_dists_and_layer"]
 
     if not new_format:
-        pion_dir = "/fast_scratch_1/jbohm/train_testing_data/" + ("pion_files" if mixed_pions else "charged_pion_files")
+        pion_dir = "/data/mjovanovic/train_testing_data/" + ("pion_files" if mixed_pions else "charged_pion_files")
     else:
-        pion_dir = "/fast_scratch_1/jbohm/train_testing_data/charged_pion_files"
+        pion_dir = "/data/mjovanovic/train_testing_data/charged_pion_files"
 
     # load cell geo tree dict
     file = uproot.open("/data/atlas/data/rho_delta/rho_small.root")
