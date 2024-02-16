@@ -17,9 +17,9 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "7" # SET GPU
 
 ## IMPORTANT ## ====== ## DISABLE EAGER EXECUTION WITH TensorFlow!! ##
 print()
-print('disabling eager execution..')
-from tensorflow.python.framework.ops import disable_eager_execution
-disable_eager_execution()
+#print('disabling eager execution..')
+#from tensorflow.python.framework.ops import disable_eager_execution
+#disable_eager_execution()
 print()
 
 MEAN_TRACK_LOG_ENERGY = 2.4
@@ -34,20 +34,32 @@ data_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho/rho_processed_tr
 output_dir = "/data/mjovanovic/cell_particle_deposit_learning/rho_train/KF_regression_Loss_test/"
 max_points_file = '../max_points.txt'
 
-num_train_files = 5 #707
+num_train_files = 1 #707
 num_val_files = 3 #210
 num_test_files = 5 #10
 events_per_file = 3800
-start_at_epoch = 0 # load start_at_epoch - 1
+start_at_epoch = False # load start_at_epoch - 1
 add_min_track_dist = True
 
-EPOCHS = 2
+EPOCHS = 100
 BATCH_SIZE = 100
-LEARNING_RATE = 2.6 #1e-2 # 1e-2
-
+LEARNING_RATE = 1e-5
 train_output_dir = data_dir# + '/train_1_track/'
 val_output_dir = data_dir + '/val_1_track/'
 test_output_dir = data_dir + '/test_1_track/'
+
+class PrintSamplePredictions(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        print("\nSample Predictions vs. Labels at Epoch: {}".format(epoch + 1))
+        sample_generator = batched_data_generator(train_files, 1, N, validation_split=0.1, is_validation=False, loop_infinite=False, add_min_track_dist=add_min_track_dist)
+        num_samples_to_display = 50  # Number of samples to display
+
+        for i, (X_sample, Y_sample) in enumerate(sample_generator):
+            if i >= num_samples_to_display:
+                break
+            prediction = model.predict(X_sample)
+            print("\nSample {}: Prediction = {}, Label = {}".format(i + 1, prediction.flatten()[:20], Y_sample.flatten()[:20]))
+            # Flatten and show only the first 10 elements to keep the output readable
 
 
     
@@ -127,8 +139,18 @@ def masked_kl_divergence_loss(y_true, y_pred):
     kl_divergence = y_true_masked * tf.math.log(y_true_masked / (y_pred_masked + 1e-15) + 1e-15)
     masked_kl_divergence = kl_divergence * mask  # Apply mask
     
+    # Additional term to encourage predictions towards 0.5
+    target_value = 0.5
+    encouragement_term = tf.square(y_pred_masked - target_value)
+    masked_encouragement_term = encouragement_term * mask  # Apply mask
+    
+    # Combine the original KL divergence loss with the encouragement term
+    combined_loss = 0*tf.reduce_sum(masked_kl_divergence) + tf.reduce_sum(masked_encouragement_term)
+    
     # Normalize by the sum of the mask to account for the masked values
-    return tf.reduce_sum(masked_kl_divergence) / tf.reduce_sum(mask)
+    return combined_loss / tf.reduce_sum(mask)
+
+
 
 train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
 val_files = np.sort(glob.glob(val_output_dir+'*.npz'))[:num_val_files]
@@ -157,7 +179,8 @@ lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     decay_rate=0.9)
 
 decay_rate = 0.1/5
-opt = tf.keras.optimizers.legacy.Adam(learning_rate=LEARNING_RATE)
+#opt = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
+opt = tf.compat.v1.train.RMSPropOptimizer(learning_rate=LEARNING_RATE)
 #opt = keras.optimizers.SGD(lr=0.1, momentum=0.8, decay=decay_rate)
 
 model.compile(optimizer=opt,
@@ -169,8 +192,8 @@ model.compile(optimizer=opt,
 model.summary()
 
 # if resuming training load saved weights
-if start_at_epoch:
-    model.load_weights(output_dir + "/weights/weights_" + str(start_at_epoch - 1) + ".h5")
+#if start_at_epoch:
+#    model.load_weights(output_dir + "/weights/weights_" + str(start_at_epoch - 1) + ".h5")
 
 
 # CALLBACKS
@@ -206,10 +229,12 @@ class SaveEpoch(tf.keras.callbacks.Callback):
             writer.writerow([start_at_epoch + epoch , logs["loss"], logs["val_loss"]])
 print(f"Validation Steps: {num_batches_val}")
 
+
+# Add the PrintSamplePredictions callback to your model training
 history = model.fit(train_generator,
-        epochs=EPOCHS,
-        validation_data=val_generator,
-        verbose=1,
-        steps_per_epoch=num_batches_train,
-        validation_steps=num_batches_val,
-        callbacks=[SaveEpoch()])
+                    epochs=EPOCHS,
+                    validation_data=val_generator,
+                    verbose=1,
+                    steps_per_epoch=num_batches_train,
+                    validation_steps=num_batches_val,
+                    callbacks=[SaveEpoch(), PrintSamplePredictions()])
