@@ -24,6 +24,9 @@ print()
 
 MEAN_TRACK_LOG_ENERGY = 2.4
 
+# Not these?
+#LOG_ENERGY_MEAN = -1 # unrounded mean is ~ -0.93
+#LOG_MEAN_TRACK_MOMETUM = 2
 
 # DATA AND OUTPUT DIRS
 data_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho/rho_processed_train_files/'
@@ -31,36 +34,22 @@ data_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho/rho_processed_tr
 output_dir = "/data/mjovanovic/cell_particle_deposit_learning/rho_train/KF_regression_Loss_test/"
 max_points_file = '../max_points.txt'
 
-num_train_files = 99 #707
+num_train_files = 5 #707
 num_val_files = 3 #210
 num_test_files = 5 #10
 events_per_file = 3800
 start_at_epoch = 0 # load start_at_epoch - 1
 add_min_track_dist = True
 
-EPOCHS = 50
+EPOCHS = 2
 BATCH_SIZE = 100
-LEARNING_RATE = 1e-2 # 1e-2
+LEARNING_RATE = 2.6 #1e-2 # 1e-2
 
 train_output_dir = data_dir# + '/train_1_track/'
 val_output_dir = data_dir + '/val_1_track/'
 test_output_dir = data_dir + '/test_1_track/'
 
-# VALIDATE ONLY (load a trained model and save predictions)
-validate_only = False
-if validate_only:
-    model = "tr_68_val_7_tst_5_lr_1e-2_BS_100_no_tnets_1_track_add_min_dist_cut_R_lt_0.1"
-    test_set = "test_1_track"
-    data_dir = '/data/mjovanovic/cell_particle_deposit_learning/train_dirs/pnet_train_1/'
-    output_dir = data_dir + model
-    start_at_epoch = 97 # state to load + 1
-    BATCH_SIZE = 100
-    num_validate_files = 5
-    validate_files_dir = data_dir + test_set + "/"
-    validate_files = np.sort(glob.glob(validate_files_dir+'*.npz'))[:num_validate_files]
-    max_points_file = '/max_points_1_track.txt'
-    save_preds_file = data_dir + model + "/tests/" + test_set + "_preds_" + str(start_at_epoch - 1) + ".npy"
-    save_labels_file = data_dir + model + "/tests/" + test_set + "_labels.npy"
+
     
 
 # DATA GENERATORS
@@ -81,7 +70,7 @@ def batched_data_generator(file_names, batch_size, max_num_points, validation_sp
                 Y = Y[:-num_validation_samples]
 
             # Pad and process data as before, now adjusted for training/validation split
-            X_padded = np.zeros((len(cluster_data), max_num_points, cluster_data.shape[2] + (1 if add_min_track_dist else 0)))
+            X_padded = np.zeros((len(cluster_data), max_num_points, cluster_data.shape[2]))# + (1 if add_min_track_dist else 0)))
             Y_padded = np.negative(np.ones((len(cluster_data), max_num_points, 1)))
 
             for i, cluster in enumerate(cluster_data):
@@ -153,13 +142,14 @@ num_batches_test = (len(test_files) * events_per_file) / BATCH_SIZE
 # load the max number of points (N) - saved to data dir
 with open(data_dir + max_points_file) as f:
     N = int(f.readline())
+N = 1180
 
 train_generator = batched_data_generator(train_files, BATCH_SIZE, N, validation_split=0.1, is_validation=False, loop_infinite=True, add_min_track_dist=add_min_track_dist)
 val_generator = batched_data_generator(train_files, BATCH_SIZE, N, validation_split=0.1, is_validation=True, loop_infinite=True, add_min_track_dist=add_min_track_dist)
 test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
 
 # COMPILE MODEL
-model = pnet_part_seg_no_tnets(N, 6 , 1)
+model = pnet_part_seg_no_tnets(1180, 5 , 1)
 
 lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     initial_learning_rate=1e-2,
@@ -182,22 +172,6 @@ model.summary()
 if start_at_epoch:
     model.load_weights(output_dir + "/weights/weights_" + str(start_at_epoch - 1) + ".h5")
 
-if validate_only:
-    validate_gernerator = batched_data_generator(validate_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
-    predictions = []
-    labels = []
-    for X_test, Y_test in validate_gernerator:
-        print("preds for file")
-        predictions.extend(model.predict(X_test))
-        labels.extend(Y_test)
-
-    np.save(save_preds_file, predictions)
-
-    if save_labels_file:
-        np.save(save_labels_file, labels)
-
-    print("Done getting preds")
-    assert(False)
 
 # CALLBACKS
 # make directories if not present
