@@ -260,13 +260,12 @@ def t_dist_block(x: tf.Tensor, size: int, name: str) -> tf.Tensor:
     #x = layers.LayerNormalization(name='layerNorm_' + name)(x) # TODO: remove just for a test
     return layers.Activation("relu", name=f"{name}_relu")(x)
 
-def t_dist_block_masked_bn(x: tf.Tensor, size: int, name: str, mask: tf.Tensor) -> tf.Tensor:
+def t_dist_block_masked_bn(x: tf.Tensor, size: int, name: str, mask: tf.Tensor=None) -> tf.Tensor:
     dense = layers.Dense(size)
-    #bn = CustomBatchNormalizationMomentum(name='batchNorm_' + name, mask=mask) # for time dist NOTE: update mask to be for each N
     x = layers.TimeDistributed(dense, name=f"{name}_tdist")(x)
-    #x = layers.TimeDistributed(bn, name=f"{name}_bn_tdist")(x) # for time dist
-    x = MaskedBatchNormalization(name='batchNorm_' + name, mask=mask)(x)
-    #x = layers.BatchNormalization(momentum=0.0, name='batchNorm_' + name)(x)
+    # Assuming you want to keep batch normalization without masking
+    bn = layers.BatchNormalization(name='batchNorm_' + name)
+    x = layers.TimeDistributed(bn, name=f"{name}_bn_tdist")(x)
     return layers.Activation("relu", name=f"{name}_relu")(x)
 
 def t_dist_block_mask(x: tf.Tensor, size: int, name: str, mask):
@@ -304,21 +303,17 @@ def tnet(inputs: tf.Tensor, num_features: int, name: str, input_points, mask: tf
 
 def pnet_part_seg_no_tnets(num_points: int, num_feat: int, num_classes: int) -> keras.Model:
     input_points = keras.Input(shape=(None, num_feat))
-    full_mask = tf.logical_not(tf.math.equal(input_points, 0))
-    mask = tf.reduce_any(full_mask, axis=-1)
 
-    # Assuming t_dist_block_masked_bn is compatible with eager execution
-    features_64 = t_dist_block_masked_bn(input_points, 64, "features_64", mask)
-    features_128_1 = t_dist_block_masked_bn(features_64, 128, "features_128_1", mask)
-    features_128_2 = t_dist_block_masked_bn(features_128_1, 128, "features_128_2", mask)
+    # Directly applying layers without custom mask logic
+    features_64 = t_dist_block_masked_bn(input_points, 64, "features_64")
+    features_128_1 = t_dist_block_masked_bn(features_64, 128, "features_128_1")
+    features_128_2 = t_dist_block_masked_bn(features_128_1, 128, "features_128_2")
 
-    features_512 = t_dist_block_masked_bn(features_128_2, 512, "features_512", mask)
-    features_2048 = t_dist_block_masked_bn(features_512, 2048, "pre_maxpool_block", mask)
+    features_512 = t_dist_block_masked_bn(features_128_2, 512, "features_512")
+    features_2048 = t_dist_block_masked_bn(features_512, 2048, "pre_maxpool_block")
 
-    # Assuming cast_to_zero is compatible with eager execution
-    features_2048_masked = layers.Lambda(cast_to_zero, name='pre_maxpool_block_masked')([features_2048, input_points])
-    
-    global_features = layers.MaxPool1D(pool_size=num_points, name="global_features")(features_2048_masked)
+    # Using MaxPooling directly without cast_to_zero masking logic
+    global_features = layers.MaxPool1D(pool_size=num_points, name="global_features")(features_2048)
     global_features = tf.tile(global_features, [1, num_points, 1])
 
     segmentation_input = layers.Concatenate(name="segmentation_input")([
@@ -329,8 +324,7 @@ def pnet_part_seg_no_tnets(num_points: int, num_feat: int, num_classes: int) -> 
         global_features,
     ])
 
-    # Assuming t_dist_block_masked_bn is compatible with eager execution for segmentation_features
-    segmentation_features = t_dist_block_masked_bn(segmentation_input, 128, "segmentation_features", mask)
+    segmentation_features = t_dist_block_masked_bn(segmentation_input, 128, "segmentation_features")
 
     # Final layers
     last_dense = layers.Dense(num_classes)

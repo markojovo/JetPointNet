@@ -12,14 +12,14 @@ from utils.pnet_models import pnet_part_seg_no_tnets, pnet_part_seg
 import awkward as ak
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "7" # SET GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = "0" # SET GPU
 
 
 ## IMPORTANT ## ====== ## DISABLE EAGER EXECUTION WITH TensorFlow!! ##
 print()
-#print('disabling eager execution..')
-#from tensorflow.python.framework.ops import disable_eager_execution
-#disable_eager_execution()
+print('disabling eager execution..')
+from tensorflow.python.framework.ops import disable_eager_execution
+disable_eager_execution()
 print()
 
 MEAN_TRACK_LOG_ENERGY = 2.4
@@ -34,7 +34,7 @@ data_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho/rho_processed_tr
 output_dir = "/data/mjovanovic/cell_particle_deposit_learning/rho_train/KF_regression_Loss_test/"
 max_points_file = '../max_points.txt'
 
-num_train_files = 1 #707
+num_train_files = 2 #707
 num_val_files = 3 #210
 num_test_files = 5 #10
 events_per_file = 3800
@@ -43,7 +43,7 @@ add_min_track_dist = True
 
 EPOCHS = 100
 BATCH_SIZE = 100
-LEARNING_RATE = 1e-5
+LEARNING_RATE = 1e-2
 train_output_dir = data_dir# + '/train_1_track/'
 val_output_dir = data_dir + '/val_1_track/'
 test_output_dir = data_dir + '/test_1_track/'
@@ -58,13 +58,13 @@ class PrintSamplePredictions(tf.keras.callbacks.Callback):
             if i >= num_samples_to_display:
                 break
             prediction = model.predict(X_sample)
-            print("\nSample {}: Prediction = {}, Label = {}".format(i + 1, prediction.flatten()[:20], Y_sample.flatten()[:20]))
+            print("\nSample {}: Prediction = {}, Label = {}".format(i + 1, prediction[:20].flatten(), Y_sample[:20].flatten()))
             # Flatten and show only the first 10 elements to keep the output readable
 
 
     
 
-# DATA GENERATORS
+# DATA GENERATORS (E, X, Y, Z, TYPE)
 def batched_data_generator(file_names, batch_size, max_num_points, validation_split=0.1, is_validation=False, loop_infinite=True, add_min_track_dist=False):
     while True:
         for file in file_names:
@@ -138,14 +138,7 @@ def masked_kl_divergence_loss(y_true, y_pred):
     # Calculate KL divergence
     kl_divergence = y_true_masked * tf.math.log(y_true_masked / (y_pred_masked + 1e-15) + 1e-15)
     masked_kl_divergence = kl_divergence * mask  # Apply mask
-    
-    # Additional term to encourage predictions towards 0.5
-    target_value = 0.5
-    encouragement_term = tf.square(y_pred_masked - target_value)
-    masked_encouragement_term = encouragement_term * mask  # Apply mask
-    
-    # Combine the original KL divergence loss with the encouragement term
-    combined_loss = 0*tf.reduce_sum(masked_kl_divergence) + tf.reduce_sum(masked_encouragement_term)
+    combined_loss = tf.reduce_sum(masked_kl_divergence)
     
     # Normalize by the sum of the mask to account for the masked values
     return combined_loss / tf.reduce_sum(mask)
@@ -170,6 +163,8 @@ train_generator = batched_data_generator(train_files, BATCH_SIZE, N, validation_
 val_generator = batched_data_generator(train_files, BATCH_SIZE, N, validation_split=0.1, is_validation=True, loop_infinite=True, add_min_track_dist=add_min_track_dist)
 test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
 
+
+
 # COMPILE MODEL
 model = pnet_part_seg_no_tnets(1180, 5 , 1)
 
@@ -179,13 +174,29 @@ lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     decay_rate=0.9)
 
 decay_rate = 0.1/5
-#opt = tf.keras.optimizers.RMSprop(learning_rate=LEARNING_RATE)
-opt = tf.compat.v1.train.RMSPropOptimizer(learning_rate=LEARNING_RATE)
-#opt = keras.optimizers.SGD(lr=0.1, momentum=0.8, decay=decay_rate)
+#opt = tf.optimizers.Adam(learning_rate=LEARNING_RATE)
+#opt = tf.optimizers.SGD(lr=0.1, momentum=0.8)
+opt = tf.optimizers.legacy.Adam(learning_rate=LEARNING_RATE)
 
 model.compile(optimizer=opt,
-              loss=masked_kl_divergence_loss,  # or any other loss function suitable for your problem
+              loss= masked_kl_divergence_loss,  # or any other loss function suitable for your problem
               metrics=[masked_mae_loss,masked_bce_pointwise_loss])  # Add MAE and binary_crossentropy here
+
+
+
+
+# Create a new generator with batch size of 1 for prediction
+single_sample_generator = batched_data_generator(train_files, 1, N, validation_split=0.1, is_validation=False, loop_infinite=False, add_min_track_dist=add_min_track_dist)
+
+# Use the new generator for predictions
+for i, (X_sample, Y_sample) in enumerate(single_sample_generator):
+    output = model.predict(X_sample)
+    print(output)
+    print(X_sample.shape)  # This should now show a batch size of 1
+    print(output.shape)
+    print(output[0])
+    if i >= 0:  # Just to demonstrate with the first sample, remove or adjust this condition as needed
+        break
 
 
 
@@ -237,4 +248,5 @@ history = model.fit(train_generator,
                     verbose=1,
                     steps_per_epoch=num_batches_train,
                     validation_steps=num_batches_val,
-                    callbacks=[SaveEpoch(), PrintSamplePredictions()])
+                    callbacks=[SaveEpoch(), PrintSamplePredictions()]
+                    )
