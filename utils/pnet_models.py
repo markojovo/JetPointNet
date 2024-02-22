@@ -346,7 +346,7 @@ def pnet_part_seg_no_tnets(num_points: int, num_feat: int, num_classes: int) -> 
     """
     last_dense = layers.Dense(num_classes)
     last_time = layers.TimeDistributed(last_dense, name='last_tdist')(segmentation_features)
-    outputs = layers.Activation('softmax', name="last_act")(last_time)
+    outputs = layers.Activation('sigmoid', name="last_act")(last_time)
 
     return keras.Model(input_points, outputs)
 

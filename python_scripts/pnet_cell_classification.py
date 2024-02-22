@@ -34,7 +34,7 @@ data_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho/rho_processed_tr
 output_dir = "/data/mjovanovic/cell_particle_deposit_learning/rho_train/KF_regression_Loss_test/"
 max_points_file = '../max_points.txt'
 
-num_train_files = 2 #707
+num_train_files = 100 #707
 num_val_files = 3 #210
 num_test_files = 5 #10
 events_per_file = 3800
@@ -141,7 +141,7 @@ def masked_kl_divergence_loss(y_true, y_pred):
     combined_loss = tf.reduce_sum(masked_kl_divergence)
     
     # Normalize by the sum of the mask to account for the masked values
-    return combined_loss / tf.reduce_sum(mask)
+    return tf.abs(combined_loss / tf.reduce_sum(mask))
 
 
 
@@ -166,7 +166,7 @@ test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite
 
 
 # COMPILE MODEL
-model = pnet_part_seg_no_tnets(1180, 5 , 1)
+model = pnet_part_seg_no_tnets(N, 5 , 1)
 
 lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     initial_learning_rate=1e-2,
@@ -180,7 +180,7 @@ opt = tf.optimizers.legacy.Adam(learning_rate=LEARNING_RATE)
 
 model.compile(optimizer=opt,
               loss= masked_kl_divergence_loss,  # or any other loss function suitable for your problem
-              metrics=[masked_mae_loss,masked_bce_pointwise_loss])  # Add MAE and binary_crossentropy here
+              metrics=[masked_mae_loss,masked_bce_pointwise_loss, masked_mse_pointwise_loss])  # Add MAE and binary_crossentropy here
 
 
 
