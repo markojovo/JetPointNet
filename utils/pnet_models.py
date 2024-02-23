@@ -204,28 +204,47 @@ def part_segmentation_model_propagate_mask(num_points: int, num_classes: int) ->
 #============================================================================#
 
 # from ChatGPT3
+
 class MaskedBatchNormalization(Layer):
     def __init__(self, momentum=0.0, epsilon=1e-3, mask=None, **kwargs):
         super(MaskedBatchNormalization, self).__init__(**kwargs)
         self.momentum = momentum
         self.epsilon = epsilon
-        self.mask = mask
 
     def build(self, input_shape):
-        self.gamma = self.add_weight(name='gamma', shape=(input_shape[-1],), initializer='ones', trainable=True)
-        self.beta = self.add_weight(name='beta', shape=(input_shape[-1],), initializer='zeros', trainable=True)
+        dim = input_shape[-1]
+        if isinstance(dim, tf.TensorShape):
+            dim = dim.value
+
+        self.gamma = self.add_weight(name='gamma', 
+                                     shape=(dim,), 
+                                     initializer='ones', 
+                                     trainable=True)
+        self.beta = self.add_weight(name='beta', 
+                                    shape=(dim,), 
+                                    initializer='zeros', 
+                                    trainable=True)
         super(MaskedBatchNormalization, self).build(input_shape)
 
-    def call(self, inputs):
-        masked_inputs = tf.boolean_mask(inputs, mask=self.mask)
-        mean, var = K.mean(masked_inputs, axis=0, keepdims=True), K.var(masked_inputs, axis=0, keepdims=True)
+    def call(self, inputs, mask=None):
+        if mask is None:
+            mask = tf.not_equal(tf.reduce_sum(inputs, axis=-1, keepdims=True), 0)
+        
+        mask = tf.cast(mask, dtype=tf.float32)
+        masked_inputs = inputs * mask
 
-        normalized = (inputs - mean) / K.sqrt(var + self.epsilon)
+        mean, variance = tf.nn.moments(masked_inputs, axes=-1, keepdims=True)
+
+        # Apply normalization
+        normalized = (masked_inputs - mean) / (tf.sqrt(variance + self.epsilon))
         return self.gamma * normalized + self.beta
 
     def get_config(self):
         config = super(MaskedBatchNormalization, self).get_config()
-        config.update({'momentum': self.momentum, 'epsilon': self.epsilon})
+        config.update({
+            'momentum': self.momentum,
+            'epsilon': self.epsilon
+        })
         return config
     
 ########
@@ -327,10 +346,9 @@ def pnet_part_seg_no_tnets(num_points: int, num_feat: int, num_classes: int) -> 
     """
     last_dense = layers.Dense(num_classes)
     last_time = layers.TimeDistributed(last_dense, name='last_tdist')(segmentation_features)
-    outputs = layers.Activation('softmax', name="last_act")(last_time)
+    outputs = layers.Activation('sigmoid', name="last_act")(last_time)
 
     return keras.Model(input_points, outputs)
-
 
 def pnet_part_seg(num_points: int) -> keras.Model:
     input_points = keras.Input(shape=(None, 6))
@@ -423,14 +441,14 @@ def mat_mult(tensors):
     return tf.linalg.matmul(x, y)
 
 def cast_to_zero(tensors):
-    ''' casts all values that should be zero to zero in the modified tensor '''
     mod_input, input_tens = tensors
-    full_mask = tf.logical_not(tf.math.equal(input_tens, 0)) # find where all X values are equal to 0
-    reduced_mask = tf.experimental.numpy.any(full_mask, axis=-1) # mask if all input feat are 0
+    full_mask = tf.logical_not(tf.math.equal(input_tens, 0))  # Find where all X values are equal to 0
+    reduced_mask = tf.reduce_any(full_mask, axis=-1)  # Mask if all input features are 0
     reduced_mask = tf.cast(reduced_mask, dtype=tf.float32)
     reduced_mask = tf.expand_dims(reduced_mask, axis=-1)
-    return_tens = tf.math.multiply(mod_input, reduced_mask)
+    return_tens = mod_input * reduced_mask
     return return_tens
+
     
 
 def tdist_block(x, mask, size: int, number: str):

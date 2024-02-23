@@ -1,14 +1,19 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "5" # SET GPU
 import tensorflow as tf
 from tensorflow import keras
-from keras import layers
-import keras.backend as K
+from tensorflow.keras import layers
 import math
 import numpy as np
 import glob
 import csv
+import sys
+sys.path.append('/home/mjovanovic/Work/PointNet_Segmentation')
 from utils.pnet_models import pnet_part_seg_no_tnets, pnet_part_seg
+import awkward as ak
+
+
+os.environ['CUDA_VISIBLE_DEVICES'] = "0" # SET GPU
+
 
 ## IMPORTANT ## ====== ## DISABLE EAGER EXECUTION WITH TensorFlow!! ##
 print()
@@ -19,132 +24,159 @@ print()
 
 MEAN_TRACK_LOG_ENERGY = 2.4
 
+# Not these?
+#LOG_ENERGY_MEAN = -1 # unrounded mean is ~ -0.93
+#LOG_MEAN_TRACK_MOMETUM = 2
 
 # DATA AND OUTPUT DIRS
-data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1'
-output_dir = "/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1/tr_50_val_5_tst_5_lr_1e-2_BS_100_no_tnets_1_track_add_min_dist_cut_track_pipm_delta_R_lt_0.1"
-max_points_file = '/max_points_1_track.txt'
+data_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho/rho_processed_train_files/'
+#data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_train/train/'
+output_dir = "/data/mjovanovic/cell_particle_deposit_learning/rho_train/KF_regression_Loss_test/"
+max_points_file = '../max_points.txt'
 
-num_train_files = 51 #707
-num_val_files = 5 #210
+num_train_files = 94 #707
+num_val_files = 3 #210
 num_test_files = 5 #10
 events_per_file = 3800
-start_at_epoch = 0 # load start_at_epoch - 1
+start_at_epoch = False # load start_at_epoch - 1
 add_min_track_dist = True
 
 EPOCHS = 100
 BATCH_SIZE = 100
-LEARNING_RATE = 1e-2
-
-train_output_dir = data_dir + '/train_1_track/'
+LEARNING_RATE = 1e-4
+train_output_dir = data_dir# + '/train_1_track/'
 val_output_dir = data_dir + '/val_1_track/'
 test_output_dir = data_dir + '/test_1_track/'
 
-# VALIDATE ONLY (load a trained model and save predictions)
-validate_only = False
-if validate_only:
-    model = "tr_68_val_7_tst_5_lr_1e-2_BS_100_no_tnets_1_track_add_min_dist_cut_R_lt_0.1"
-    test_set = "test_1_track"
-    data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/train_dirs/pnet_train_1/'
-    output_dir = data_dir + model
-    start_at_epoch = 97 # state to load + 1
-    BATCH_SIZE = 100
-    num_validate_files = 5
-    validate_files_dir = data_dir + test_set + "/"
-    validate_files = np.sort(glob.glob(validate_files_dir+'*.npz'))[:num_validate_files]
-    max_points_file = '/max_points_1_track.txt'
-    save_preds_file = data_dir + model + "/tests/" + test_set + "_preds_" + str(start_at_epoch - 1) + ".npy"
-    save_labels_file = data_dir + model + "/tests/" + test_set + "_labels.npy"
+class PrintSamplePredictions(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs=None):
+        print("\nSample Predictions vs. Labels at Epoch: {}".format(epoch + 1))
+        sample_generator = batched_data_generator(train_files, 1, N, validation_split=0.1, is_validation=False, loop_infinite=False, add_min_track_dist=add_min_track_dist)
+        num_samples_to_display = 50  # Number of samples to display
+
+        for i, (X_sample, Y_sample) in enumerate(sample_generator):
+            if i >= num_samples_to_display:
+                break
+            prediction = model.predict(X_sample)
+            print("\nSample {}: Prediction = {}, Label = {}".format(i + 1, prediction[:20].flatten(), Y_sample[:20].flatten()))
+            # Flatten and show only the first 10 elements to keep the output readable
+
+
     
 
-# DATA GENERATORS
-def batched_data_generator(file_names, batch_size, max_num_points, loop_infinite=True, add_energy_ratio=False, add_min_track_dist=False, add_both=False):
+# DATA GENERATORS (E, X, Y, Z, TYPE)
+def batched_data_generator(file_names, batch_size, max_num_points, validation_split=0.1, is_validation=False, loop_infinite=True, add_min_track_dist=False):
     while True:
         for file in file_names:
-            #print("loaded file")
             point_net_data = np.load(file)
-            #track_pipm_delta_R = np.load("/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_processed_train_files/delta_R/" + "_".join(file.split("/")[-1].split("_")[:-2]) + "_track_pipm_delta_R.npy", allow_pickle=True) # load the noy file instead of npz # 
+            cluster_data = point_net_data['X']
+            Y = point_net_data['Y']
 
-            #print("track cut len", len(track_pipm_delta_R), "events len", len(point_net_data['X']))
-
-            # first cut out the veryyyy few events w nTracks == 1 but there is info for more than one track :/
-            #cut = np.array([isinstance(event_track_pipm_delta_R, float) and event_track_pipm_delta_R < 0.1 for event_track_pipm_delta_R in track_pipm_delta_R])
-
-            cluster_data = point_net_data['X']#[cut]
-            Y = point_net_data['Y']#[cut]
-
-            # pad X data to have y dimension of max_num_points
-            if add_energy_ratio or add_min_track_dist:
-                X_padded = np.zeros((cluster_data.shape[0], max_num_points, cluster_data.shape[2] + 1))
-            elif add_both:
-                X_padded = np.zeros((cluster_data.shape[0], max_num_points, cluster_data.shape[2] + 2))
+            # Calculate the number of data points to be used for validation and adjust the dataset accordingly
+            num_validation_samples = int(len(cluster_data) * validation_split)
+            if is_validation:
+                cluster_data = cluster_data[-num_validation_samples:]
+                Y = Y[-num_validation_samples:]
             else:
-                X_padded = np.zeros((cluster_data.shape[0], max_num_points, cluster_data.shape[2]))
-            Y_padded = np.negative(np.ones(((cluster_data.shape[0], max_num_points, 1)))) # NOTE: update for weighted cells
-            
-            for i, cluster in enumerate(cluster_data):                
-                if add_energy_ratio or add_both:
-                   track_values = cluster[:,0][cluster[:,4] == 1]
-                   track_value = track_values[0] if np.any(track_values) else 0
-                   if track_value or add_both:
-                       X_padded[i, :len(cluster), 5] = X_padded[i, :len(cluster), 0] / track_value
-                elif add_min_track_dist:
-                    track_points_idx = np.arange(len(cluster))[cluster[:, 4] == 1]
-                    dists = np.zeros((len(cluster), len(track_points_idx)))
+                cluster_data = cluster_data[:-num_validation_samples]
+                Y = Y[:-num_validation_samples]
 
-                    for j, track_point_idx in enumerate(track_points_idx):
-                        dists[:, j] = np.sqrt((cluster[:, 1] - cluster[track_point_idx, 1])**2 + (cluster[:, 2] - cluster[track_point_idx, 2])**2 + (cluster[:, 3] - cluster[track_point_idx, 3])**2)
+            # Pad and process data as before, now adjusted for training/validation split
+            X_padded = np.zeros((len(cluster_data), max_num_points, cluster_data.shape[2]))# + (1 if add_min_track_dist else 0)))
+            Y_padded = np.negative(np.ones((len(cluster_data), max_num_points, 1)))
 
-                    dist_feat_idx = 5
-                    if add_both:
-                        dist_feat_idx = 6
+            for i, cluster in enumerate(cluster_data):
+                if add_min_track_dist:
+                    # Your logic to calculate and add minimum track distance or any other feature
+                    pass
 
-                    if np.any(track_points_idx):
-                        min_dists = np.min(dists, axis=1)
-                        # recast padding to 0 (padding is where the point is not a track and the label is -1)
-                        min_dists[(cluster[:, 4] == 0) & (Y[i, :, 0] == -1)] = 0#13500
-                        X_padded[i, :len(cluster), dist_feat_idx] = min_dists
+                # Adjust padding based on actual cluster size
+                actual_size = min(len(cluster), max_num_points)
+                X_padded[i, :actual_size, :cluster.shape[1]] = cluster[:actual_size]
+                #Y_padded[i, :actual_size, 0] = Y[i][:actual_size]
+                Y_padded[i, :actual_size, 0] = Y[i][:actual_size].flatten()
 
-                X_padded[i, :len(cluster), :5] = cluster
-                Y_padded[i, :len(cluster), :] = Y[i]
-    
-            # split into batch_size groups of clusters
-            for i in range(1, math.ceil(cluster_data.shape[0]/batch_size)):
-                yield X_padded[(i-1)*batch_size:i*batch_size], Y_padded[(i-1)*batch_size:i*batch_size]
+
+            # Yield batches
+            total_batches = math.ceil(len(cluster_data) / batch_size)
+            for batch_num in range(total_batches):
+                start_index = batch_num * batch_size
+                end_index = start_index + batch_size
+                yield X_padded[start_index:end_index], Y_padded[start_index:end_index]
+
         if not loop_infinite:
             break
 
 
-# LOSS
-def masked_bce_weighted_pointwise_loss(y_true, y_pred):
-    weights = tf.expand_dims(y_true[:,:,1], -1)
-    y_true = tf.expand_dims(y_true[:,:,0], -1)
-    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
-    return K.sum(tf.multiply(tf.multiply(weights, mask), K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask))), axis=None) / K.sum(mask, axis=None)
+def masked_mae_loss(y_true, y_pred):
+    y_true = tf.expand_dims(y_true[:, :, 0], -1)  # Adjusting shape if necessary
+    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)  # Mask for values not equal to -1
+    absolute_difference = tf.abs(y_true - y_pred)  # Calculate absolute difference
+    masked_absolute_difference = absolute_difference * mask  # Apply mask
+    return tf.reduce_sum(masked_absolute_difference) / tf.reduce_sum(mask)  # Normalize by the sum of the mask
+
 
 def masked_bce_pointwise_loss(y_true, y_pred):
     y_true = tf.expand_dims(y_true[:,:,0], -1)
     mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
-    return K.sum(K.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask)), axis=None) / K.sum(mask, axis=None)
+    return tf.reduce_sum(tf.keras.losses.binary_crossentropy(tf.multiply(y_pred, mask), tf.multiply(y_true, mask)), axis=None) / tf.reduce_sum(mask, axis=None)
+
+def masked_mse_pointwise_loss(y_true, y_pred):
+    y_true = tf.expand_dims(y_true[:,:,0], -1)
+    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)
+    squared_difference = tf.square(y_true - y_pred)
+    masked_squared_difference = squared_difference * mask
+    masked_loss = tf.reduce_sum(masked_squared_difference) / tf.reduce_sum(mask)
+    return masked_loss
+
+def masked_kl_divergence_loss(y_true, y_pred):
+        # Constants to avoid division by zero and log of zero
+    epsilon = tf.constant(1e-15, dtype=tf.float32)
+    
+    # Clip y_pred to avoid exact 0 or 1 values
+    y_pred = tf.clip_by_value(y_pred, epsilon, 1 - epsilon)
+    
+    # Generate mask to exclude indices where y_true is -1
+    mask = tf.cast(tf.not_equal(y_true, -1), dtype=tf.float32)
+    
+    y_pred_masked = tf.multiply(y_pred,mask)
+    y_true_masked = tf.multiply(y_true,mask)
+
+    # Calculate KL divergence for each index using filtered values
+    kl_divergences = y_true_masked * tf.math.log((y_true_masked + epsilon) / (y_pred_masked + epsilon)) + (1 - y_true_masked) * tf.math.log(((1 - y_true_masked) + epsilon) / ((1 - y_pred_masked) + epsilon))
+
+
+
+
+    # Compute the mean of the KL divergences for the valid indices
+    loss = tf.reduce_mean(kl_divergences*mask)
+    
+    return loss
+
+
 
 train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
 val_files = np.sort(glob.glob(val_output_dir+'*.npz'))[:num_val_files]
 test_files = np.sort(glob.glob(test_output_dir+'*.npz'))[:num_test_files]
 
-num_batches_train = (len(train_files) * events_per_file) / BATCH_SIZE 
-num_batches_val = (len(val_files) * events_per_file) / BATCH_SIZE
+num_batches_train = (len(train_files) * events_per_file * (1 - 0.1)) // BATCH_SIZE
+num_batches_val = (len(train_files) * events_per_file * 0.1) // BATCH_SIZE
+
 num_batches_test = (len(test_files) * events_per_file) / BATCH_SIZE
 
 # load the max number of points (N) - saved to data dir
 with open(data_dir + max_points_file) as f:
     N = int(f.readline())
+N = 1180
 
-train_generator = batched_data_generator(train_files, BATCH_SIZE, N, add_min_track_dist=add_min_track_dist)
-val_generator = batched_data_generator(val_files, BATCH_SIZE, N, add_min_track_dist=add_min_track_dist)
+train_generator = batched_data_generator(train_files, BATCH_SIZE, N, validation_split=0.1, is_validation=False, loop_infinite=True, add_min_track_dist=add_min_track_dist)
+val_generator = batched_data_generator(train_files, BATCH_SIZE, N, validation_split=0.1, is_validation=True, loop_infinite=True, add_min_track_dist=add_min_track_dist)
 test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
 
+
+
 # COMPILE MODEL
-model = pnet_part_seg_no_tnets(N)
+model = pnet_part_seg_no_tnets(N, 5 , 1)
 
 lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     initial_learning_rate=1e-2,
@@ -152,32 +184,38 @@ lr_schedule = keras.optimizers.schedules.ExponentialDecay(
     decay_rate=0.9)
 
 decay_rate = 0.1/5
-opt = keras.optimizers.Adam(learning_rate=LEARNING_RATE)
-#opt = keras.optimizers.SGD(lr=0.1, momentum=0.8, decay=decay_rate)
+#opt = tf.optimizers.Adam(learning_rate=LEARNING_RATE)
+#opt = tf.optimizers.SGD(lr=0.1, momentum=0.8)
+opt = tf.optimizers.legacy.Adam(learning_rate=LEARNING_RATE)
 
-model.compile(loss=masked_bce_pointwise_loss, optimizer=opt)
+model.compile(optimizer=opt,
+              loss= masked_kl_divergence_loss,  # or any other loss function suitable for your problem
+              metrics=[masked_mae_loss,masked_bce_pointwise_loss, masked_mse_pointwise_loss])  # Add MAE and binary_crossentropy here
+
+
+
+
+# Create a new generator with batch size of 1 for prediction
+single_sample_generator = batched_data_generator(train_files, 1, N, validation_split=0.1, is_validation=False, loop_infinite=False, add_min_track_dist=add_min_track_dist)
+
+# Use the new generator for predictions
+for i, (X_sample, Y_sample) in enumerate(single_sample_generator):
+    output = model.predict(X_sample)
+    print(output)
+    print(X_sample.shape)  # This should now show a batch size of 1
+    print(output.shape)
+    print(output[0])
+    if i >= 0:  # Just to demonstrate with the first sample, remove or adjust this condition as needed
+        break
+
+
+
 model.summary()
 
 # if resuming training load saved weights
-if start_at_epoch:
-    model.load_weights(output_dir + "/weights/weights_" + str(start_at_epoch - 1) + ".h5")
+#if start_at_epoch:
+#    model.load_weights(output_dir + "/weights/weights_" + str(start_at_epoch - 1) + ".h5")
 
-if validate_only:
-    validate_gernerator = batched_data_generator(validate_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
-    predictions = []
-    labels = []
-    for X_test, Y_test in validate_gernerator:
-        print("preds for file")
-        predictions.extend(model.predict(X_test))
-        labels.extend(Y_test)
-
-    np.save(save_preds_file, predictions)
-
-    if save_labels_file:
-        np.save(save_labels_file, labels)
-
-    print("Done getting preds")
-    assert(False)
 
 # CALLBACKS
 # make directories if not present
@@ -210,11 +248,15 @@ class SaveEpoch(tf.keras.callbacks.Callback):
         with open(output_dir + "/log_loss.csv" ,'a') as file:
             writer = csv.writer(file)
             writer.writerow([start_at_epoch + epoch , logs["loss"], logs["val_loss"]])
+print(f"Validation Steps: {num_batches_val}")
 
+
+# Add the PrintSamplePredictions callback to your model training
 history = model.fit(train_generator,
-        epochs=EPOCHS,
-        validation_data=val_generator,
-        verbose=1,
-        steps_per_epoch=num_batches_train,
-        validation_steps=num_batches_val,
-        callbacks=[SaveEpoch()])
+                    epochs=EPOCHS,
+                    validation_data=val_generator,
+                    verbose=1,
+                    steps_per_epoch=num_batches_train,
+                    validation_steps=num_batches_val,
+                    callbacks=[SaveEpoch(), PrintSamplePredictions()]
+                    )

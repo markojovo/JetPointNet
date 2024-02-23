@@ -8,7 +8,7 @@ import numpy as np
 import glob
 import csv
 import sys
-sys.path.append('/home/jbohm/start_tf/PointNet_Segmentation')
+sys.path.append('/home/mjovanovic/Work/PointNet_Segmentation')
 from utils.pnet_models import pnet_part_seg_no_tnets, pnet_part_seg
 import awkward as ak
 
@@ -19,7 +19,7 @@ from numpy import genfromtxt
 
 
 # set GPU
-os.environ['CUDA_VISIBLE_DEVICES'] = "5"
+os.environ['CUDA_VISIBLE_DEVICES'] = "2"
 
 # disable eager execution with tensorflow (since can't execute lambda functions with eager execution)
 from tensorflow.python.framework.ops import disable_eager_execution
@@ -27,12 +27,12 @@ disable_eager_execution()
 
 
 # DATA AND OUTPUT DIRS
-data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/delta_train' # parent directory that holds train, val, and test files
+data_dir = '/data/mjovanovic/cell_particle_deposit_learning/delta_train' # parent directory that holds train, val, and test files
 train_data_dir = data_dir + '/train_2_tracks/'
 val_data_dir = data_dir + '/val_2_tracks/'
 test_data_dir = data_dir + '/test_2_tracks/'
 
-output_dir = "/fast_scratch_1/jbohm/cell_particle_deposit_learning/delta_train/tr_50_val_5_tst_5_delta_2_tracks_eventwise_loss_lr_1e-2_BS_100_no_tnets_add_min_dist" # save model and predictions to this dir
+output_dir = "/data/mjovanovic/cell_particle_deposit_learning/delta_train/tr_50_val_5_tst_5_delta_2_tracks_eventwise_loss_lr_1e-2_BS_100_no_tnets_add_min_dist" # save model and predictions to this dir
 max_points_file = '/max_points_2_tracks.txt' # load the max number of points in a sample
 
 num_train_files = 50
@@ -55,8 +55,8 @@ num_tracks = 2
 # VALIDATE ONLY (load a trained model and save predictions)
 validate_only = False
 if validate_only:
-    data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/delta_train/'
-    model_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_train/'
+    data_dir = '/data/mjovanovic/cell_particle_deposit_learning/delta_train/'
+    model_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho_train/'
     model = "tr_25_val_3_tst_5_rho_2_class_lr_1e-2_BS_100_no_tnets_add_min_dist"
     test_set = "test_1_track"
     output_dir = model_dir + model

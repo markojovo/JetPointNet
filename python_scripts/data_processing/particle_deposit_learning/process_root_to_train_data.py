@@ -7,7 +7,10 @@ import awkward as ak
 import multiprocessing
 import vector
 
-sys.path.append("/home/jbohm/start_tf/PointNet_Segmentation")
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+sys.path.append("/home/mjovanovic/Work/PointNet_Segmentation")
 from utils.track_metadata import *
 from utils.data_processing_util import *
 
@@ -16,8 +19,8 @@ LOG_ENERGY_MEAN = -1 # unrounded mean is ~ -0.93
 LOG_MEAN_TRACK_MOMETUM = 2
 
 def process_events(args):
-    event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case = args
-    
+    event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case, regression = args
+    print(f"Processing: {preprocessed_file_name}...")
     decay_group = {
         "delta+_p": 0,
         "delta+_n": 1,
@@ -149,7 +152,7 @@ def process_events(args):
             np.save(save_dir + dataset + "_processed_test_files/" + file_label + file_details, event_data)
 
     else:
-        event_data = np.load(save_dir + dataset + "_processed_test_files/" + preprocessed_file_name[:-8] + ".npy", allow_pickle=True).item()
+        event_data = np.load(save_dir + dataset + "_processed_test_files/" + preprocessed_file_name[:-8] + ".npz.npy", allow_pickle=True).item()
         file_label = "_".join(preprocessed_file_name.split("_")[:1])
         file_details = "_".join(preprocessed_file_name.split("_")[2:6])
 
@@ -191,7 +194,7 @@ def process_events(args):
     num_cells = 0
     max_num_tracks = 1 if dataset == "rho" else 2 # just delta and rho dataset processing for now
 
-    for feature in [*node_feature_names, 'x', 'y', 'z', 'cell_E', 'cell_part_deposit_labels', 'cell_weights']:
+    for feature in [*node_feature_names, 'x', 'y', 'z', 'cell_E', 'cell_part_deposit_labels', 'cell_weights', 'cell_regression_deposit_labels']:
         processed_event_data[feature] = []
 
     for feature in ['x', 'y', 'z', 'P', 'track_classes']:
@@ -330,7 +333,7 @@ def process_events(args):
                 # if the pi0 deposits the majority of the energy label cell 1 else if pi+/- deposits majority label cell 0
                 frac_pi0_energy = ak.sum(event_data["cluster_cell_hitsTruthE"][event_idx][event_data["cluster_cell_hitsTruthIndex"][event_idx] != 1], axis=1)/ak.sum(event_data["cluster_cell_hitsTruthE"][event_idx], axis=1)
                 cell_part_deposit_labels = [1 if cell_frac_pi0_energy > 0.5 else 0 for cell_frac_pi0_energy in frac_pi0_energy]
-
+                cell_regression_deposit_labels = [cell_frac_pi0_energy for cell_frac_pi0_energy in frac_pi0_energy]
 
             # if the particle has 2 tracks match the track to the particle closest & threshold that they must be close enough together
             # for delta dataset either delta++ -> proton + pi+/- or delta0 -> proton + pi+/-
@@ -416,12 +419,15 @@ def process_events(args):
                     if (pairing_one and track_idx == 0) or (not pairing_one and track_idx == 1): # pair track 0 and part 1
                         class_part_idx_1 = 0 # track of interest
                         class_part_idx_not_1 = 1 # other tracked charged particle 
+                        cell_regression_frac = 1 - frac_cell_energy_from_part_idx_1
 
                     else: # pairing 1 and track idx == 1 or paring 2 and track idx == 0
                         class_part_idx_1 = 1
                         class_part_idx_not_1 = 0
+                        cell_regression_frac = frac_cell_energy_from_part_idx_1
 
                     cell_part_deposit_labels = [class_part_idx_not_1 if cell_frac_cell_energy_from_part_idx_1 < 0.5 else class_part_idx_1 for cell_frac_cell_energy_from_part_idx_1 in frac_cell_energy_from_part_idx_1]
+                    cell_regression_deposit_labels = [regress_label for regress_label in cell_regression_frac]
                     #print("cell_labels:", cell_labels)
                     track_1_P =  np.log10((event_data["trackP"][event_idx][0])) - LOG_ENERGY_MEAN
                     track_2_P =  np.log10((event_data["trackP"][event_idx][1])) - LOG_ENERGY_MEAN
@@ -443,6 +449,7 @@ def process_events(args):
                 # else no tracks => Pt = 0
 
                 processed_event_data["cell_part_deposit_labels"].append(np.array(cell_part_deposit_labels)[cell_has_E_deposit])
+                processed_event_data["cell_regression_deposit_labels"].append(np.array(cell_regression_deposit_labels)[cell_has_E_deposit])
 
                 processed_event_track_data["x"].append(x_tracks)
                 processed_event_track_data["y"].append(y_tracks)
@@ -454,11 +461,11 @@ def process_events(args):
                 
                 if num_cells + NUM_TRACK_POINTS*max_num_tracks > max_cells:
                     max_cells = num_cells + NUM_TRACK_POINTS*max_num_tracks
-
-                if event_data["decay_group"][event_idx] == decay_group["delta+_p"]:
-                    tot_p_pi0 += 1
-                elif event_data["decay_group"][event_idx] == decay_group["delta+_n"] or event_data["decay_group"][event_idx] == decay_group["delta-"]:
-                    tot_n_pipm += 1
+                if not dataset == "rho":
+                    if event_data["decay_group"][event_idx] == decay_group["delta+_p"]:
+                        tot_p_pi0 += 1
+                    elif event_data["decay_group"][event_idx] == decay_group["delta+_n"] or event_data["decay_group"][event_idx] == decay_group["delta-"]:
+                        tot_n_pipm += 1
 
                 num_events_saved += 1
                 added_one_sample = True
@@ -484,11 +491,11 @@ def process_events(args):
 
 
         point_data[idx, :num_points] = np.transpose(event_point_data)
-        point_label[idx, :num_points] = np.transpose([np.concatenate((processed_event_data["cell_part_deposit_labels"][idx], np.full(NUM_TRACK_POINTS*max_num_tracks, -1)))]) # label all tracks as -1
+        point_label[idx, :num_points] = np.transpose([np.concatenate((processed_event_data["cell_regression_deposit_labels"][idx], np.full(NUM_TRACK_POINTS*max_num_tracks, -1)))]) # label all tracks as -1
 
     file_path = save_dir + dataset + "_processed_train_files/" + file_name.split(".")[0]
     if(True): # TODO: update
-        np.savez(file_path, X=point_data, Y=point_label, cell_weights=processed_event_data["cell_weights"])
+        np.savez(file_path, X=point_data, Y=point_label)#, cell_weights=processed_event_data["cell_weights"])
     else:    
         np.savez(file_path, X=point_data, Y=point_label)
 
@@ -525,6 +532,7 @@ if __name__ == "__main__":
 
     niche_case = config["niche_case"]
 
+    regression = config["regression"]
 
     # load cell geo tree to look uo cells location
     cell_geo_tree_file = uproot.open("/data/atlas/data/rho_delta/rho_small.root")
@@ -546,14 +554,15 @@ if __name__ == "__main__":
     starting_event_idxs = [file_len*batch_idx + starting_event_idx for batch_idx in range(num_files_to_process)]
     preprocessed_file_names = list(map(lambda i:  preprocessed_file_name + "_len_" + str(file_len) + "_i_" + str(i) + ".npz.npy", np.arange(i_low, i_high + 1)))
 
+    print("Starting processing...")
     if preprocessed:
         event_root_data = "null"
         event_start_idx = "null"
-        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case) for preprocessed_file_name in preprocessed_file_names])
+        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case, regression) for preprocessed_file_name in preprocessed_file_names])
     else:
         event_root_data = uproot.open(events_root_file)["EventTree"]
         preprocessed_file_name = "null"
-        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case) for event_start_idx in starting_event_idxs])
+        pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case, regression) for event_start_idx in starting_event_idxs])
 
     # as files are processed and the max num points are added to queue on completion, compare with current max 
     while not max_points_queue.empty():
