@@ -34,7 +34,7 @@ data_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho/rho_processed_tr
 output_dir = "/data/mjovanovic/cell_particle_deposit_learning/rho_train/KF_regression_Loss_test/"
 max_points_file = '../max_points.txt'
 
-num_train_files = 100 #707
+num_train_files = 94 #707
 num_val_files = 3 #210
 num_test_files = 5 #10
 events_per_file = 3800
@@ -43,7 +43,7 @@ add_min_track_dist = True
 
 EPOCHS = 100
 BATCH_SIZE = 100
-LEARNING_RATE = 1e-2
+LEARNING_RATE = 1e-4
 train_output_dir = data_dir# + '/train_1_track/'
 val_output_dir = data_dir + '/val_1_track/'
 test_output_dir = data_dir + '/test_1_track/'
@@ -130,18 +130,28 @@ def masked_mse_pointwise_loss(y_true, y_pred):
     return masked_loss
 
 def masked_kl_divergence_loss(y_true, y_pred):
-    y_true = tf.expand_dims(y_true[:, :, 0], -1)  # Adjusting shape if necessary
-    mask = tf.cast(tf.not_equal(y_true, -1), tf.float32)  # Mask for values not equal to -1
-    y_true_masked = tf.multiply(y_true, mask)  # Apply mask to y_true
-    y_pred_masked = tf.multiply(y_pred, mask)  # Apply mask to y_pred
+        # Constants to avoid division by zero and log of zero
+    epsilon = tf.constant(1e-15, dtype=tf.float32)
     
-    # Calculate KL divergence
-    kl_divergence = y_true_masked * tf.math.log(y_true_masked / (y_pred_masked + 1e-15) + 1e-15)
-    masked_kl_divergence = kl_divergence * mask  # Apply mask
-    combined_loss = tf.reduce_sum(masked_kl_divergence)
+    # Clip y_pred to avoid exact 0 or 1 values
+    y_pred = tf.clip_by_value(y_pred, epsilon, 1 - epsilon)
     
-    # Normalize by the sum of the mask to account for the masked values
-    return tf.abs(combined_loss / tf.reduce_sum(mask))
+    # Generate mask to exclude indices where y_true is -1
+    mask = tf.cast(tf.not_equal(y_true, -1), dtype=tf.float32)
+    
+    y_pred_masked = tf.multiply(y_pred,mask)
+    y_true_masked = tf.multiply(y_true,mask)
+
+    # Calculate KL divergence for each index using filtered values
+    kl_divergences = y_true_masked * tf.math.log((y_true_masked + epsilon) / (y_pred_masked + epsilon)) + (1 - y_true_masked) * tf.math.log(((1 - y_true_masked) + epsilon) / ((1 - y_pred_masked) + epsilon))
+
+
+
+
+    # Compute the mean of the KL divergences for the valid indices
+    loss = tf.reduce_mean(kl_divergences*mask)
+    
+    return loss
 
 
 
