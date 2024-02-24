@@ -9,7 +9,7 @@ import vector
 FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
 
 # Maximum distance for cell and track identification
-MAX_DISTANCE = 1.6
+MAX_DISTANCE = 0.2
 
 # Open the ROOT file and access the EventTree
 events = uproot.open(FILE_LOC + ":EventTree")
@@ -38,7 +38,7 @@ def calculate_delta_r(eta1, phi1, eta2, phi2):
     deta = eta2 - eta1
     return np.sqrt(deta**2 + dphi**2)
 
-for data in events.iterate(["trackEta", "trackPhi", "nTrack",
+for data in events.iterate(["trackEta_EMB2", "trackPhi_EMB2", "nTrack",
                             "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi", "cluster_cell_E"],
                            library="ak", step_size="100MB"):
     print(f"Processing a batch of {len(data)} events.")
@@ -46,8 +46,8 @@ for data in events.iterate(["trackEta", "trackPhi", "nTrack",
     for event_idx, event in enumerate(data):
         print(f"\nEvent {event_idx+1} details:")
         
-        track_eta = event["trackEta"]
-        track_phi = event["trackPhi"]
+        track_eta = event["trackEta_EMB2"]
+        track_phi = event["trackPhi_EMB2"]
         cells = ak.zip({
             "ID": event["cluster_cell_ID"],
             "eta": event["cluster_cell_Eta"],
@@ -56,25 +56,38 @@ for data in events.iterate(["trackEta", "trackPhi", "nTrack",
         })
 
         # Loop over tracks
-        for track_idx, (eta1, phi1) in enumerate(zip(track_eta, track_phi)):
-            contained_cell_energies = []
-            # Loop over cells
-            for cell in cells:
-                cell_eta = cell["eta"]
-                cell_phi = cell["phi"]
-                cell_energy = cell["energy"]
-                
-                # Calculate delta R for each cell with respect to the current track
-                # Here, we assume eta and phi are single values for each cell
-                # If they are arrays, you'll need additional handling
-                delta_r = calculate_delta_r(eta1, phi1, cell_eta, cell_phi)
-                
-                # Now we have to use ak.any or ak.all since delta_r is an array
-                if ak.any(delta_r < MAX_DISTANCE):
-                    # This assumes we want to add the energy if any part of the cell is within range
-                    contained_cell_energies.append(cell_energy)
+        for event_idx, event in enumerate(data):
+            print(f"\nEvent {event_idx+1} details:")
+            
+            track_eta = event["trackEta_EMB2"]
+            track_phi = event["trackPhi_EMB2"]
+            cells = ak.zip({
+                "ID": event["cluster_cell_ID"],
+                "eta": event["cluster_cell_Eta"],
+                "phi": event["cluster_cell_Phi"],
+                "energy": event["cluster_cell_E"]
+            })
 
-            print(f"Track {track_idx} contains cells with energies: {contained_cell_energies}")
+            # Loop over tracks
+            for track_idx, (eta1, phi1) in enumerate(zip(track_eta, track_phi)):
+                contained_cell_energies = []
+                # Loop over cells
+                for cell in cells:
+                    cell_eta = cell["eta"]
+                    cell_phi = cell["phi"]
+                    cell_energy = cell["energy"]
+                    
+                    # Calculate delta R for each cell with respect to the current track
+                    delta_r = calculate_delta_r(eta1, phi1, cell_eta, cell_phi)
+                    
+                    # Now we have to use ak.any or ak.all since delta_r is an array
+                    mask = delta_r < MAX_DISTANCE
+                    if ak.any(mask):
+                        # Flatten the energies for the masked cells and extend the list
+                        contained_cell_energies.extend(ak.to_list(cell_energy[mask]))
 
-        if event_idx > 0:  # Process only the first event for demonstration
-            break
+                # Print energies in a flattened list format
+                print(f"Track {track_idx} contains {len(contained_cell_energies)} cells with energies: \n{np.round(contained_cell_energies,2)}\n\n")
+
+            if event_idx > 0:
+                exit()
