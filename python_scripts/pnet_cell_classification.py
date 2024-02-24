@@ -43,7 +43,7 @@ add_min_track_dist = True
 
 EPOCHS = 100
 BATCH_SIZE = 100
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 1e-2
 train_output_dir = data_dir# + '/train_1_track/'
 val_output_dir = data_dir + '/val_1_track/'
 test_output_dir = data_dir + '/test_1_track/'
