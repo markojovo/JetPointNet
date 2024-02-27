@@ -16,6 +16,45 @@ MAX_DISTANCE = 1.6
 # Open the ROOT file and access the EventTree
 events = uproot.open(FILE_LOC + ":EventTree")
 
+for key in events.keys():
+    print(key)
+
+
+print(events["trackSubtractedCaloEnergy"].array()[0])
+
+
+
+'''
+Done:
+- Load in dataset
+- Get track x, y, z values
+
+Next:
+- Outline what you need in outcome (what in labels, what in features, look at the feats/labels data you have already)
+    - First, extract the cells from the event (for each cell, get its ID, eta/phi in EMB2 and EME2), and its cell_E (measured)
+    - Should be a track item, and in each track item:
+        - the track info:
+            - event number index
+            - track particle ID (or index?)
+            - x/y/z
+            - EMB2 eta/phi (or EME2 if it doesnt hit that, can check metadata)
+            - track point energy
+            - include (as another single value info field) the total amount of energy (cell E) in the track window
+        - the cells within the deltaR distance (of the track eta/phi of the track) (include the fields from the "First, extract..." line)
+            - include the minimum track distance (find the distance between the cell and the closest track point) for each cell
+        - Indices of any tracks that fall within the focused track's EMB/EME eta/phi (so we can extract their x/y/z/E values later)
+        
+
+After:
+- the features should be the x, y, z, energy, minimum distance_to_track and the point type (0 for cell, 1 for focused track, 2 for unfocused track)
+- Now need to do the labels:
+    - The label should be: for each cell (just 1d array, no xyz in label, but have it ordered with cells) how much of the cell's energy comes from the focused track
+    - To do this, we grab focus particle index / ID, then grab the hitsTruthE for each cell and find the ratio of how much of the cell's energy is from the focused track particle ID
+        Note: focused track will always be 1.0, unfocused track will always be 0.0 and the mask will be -1 (remember to find maximum number of cells hit by a track in dataset)
+
+- Then, do final processing, format it into numpy files, and save!
+'''
+
 # Define the function to convert eta and phi to cartesian coordinates
 def eta_phi_to_cartesian(eta, phi, R=1):
     theta = 2 * np.arctan(np.exp(-eta))
