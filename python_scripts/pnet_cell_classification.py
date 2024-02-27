@@ -38,8 +38,8 @@ num_train_files = 94 #707
 num_val_files = 3 #210
 num_test_files = 5 #10
 events_per_file = 3800
-start_at_epoch = False # load start_at_epoch - 1
-add_min_track_dist = True
+start_at_epoch = 25 # False # load start_at_epoch - 1
+add_min_track_dist = False
 
 EPOCHS = 100
 BATCH_SIZE = 100
@@ -213,8 +213,8 @@ for i, (X_sample, Y_sample) in enumerate(single_sample_generator):
 model.summary()
 
 # if resuming training load saved weights
-#if start_at_epoch:
-#    model.load_weights(output_dir + "/weights/weights_" + str(start_at_epoch - 1) + ".h5")
+if start_at_epoch:
+    model.load_weights(output_dir + "/weights/weights_" + str(start_at_epoch - 1) + ".h5")
 
 
 # CALLBACKS
