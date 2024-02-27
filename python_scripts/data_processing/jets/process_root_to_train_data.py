@@ -4,80 +4,39 @@ import numpy as np
 import vector
 import sys
 sys.path.append("/home/mjovanovic/Work/PointNet_Segmentation")
-from utils.track_metadata import *
-
+from utils.track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
+HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
 
 # Path to the ROOT file containing jet events
 FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
 
 # Maximum distance for cell and track identification
-MAX_DISTANCE = 0.2
+MAX_DISTANCE = 1.6
 
 # Open the ROOT file and access the EventTree
 events = uproot.open(FILE_LOC + ":EventTree")
 
 # Define the function to convert eta and phi to cartesian coordinates
-
 def eta_phi_to_cartesian(eta, phi, R=1):
     theta = 2 * np.arctan(np.exp(-eta))
     x = R * np.cos(phi)
     y = R * np.sin(phi)
     z = R / np.tan(theta)
-
     return x, y, z
-
-
 
 # Define the function to calculate the intersection with a fixed R layer
-
 def intersection_fixed_r(eta, phi, fixed_r):
-    x, y, z = eta_phi_to_cartesian(eta, phi, R=1)
-    x *= fixed_r
-    y *= fixed_r
-    z *= fixed_r * np.sinh(eta)
-
+    x, y, z = eta_phi_to_cartesian(eta, phi, R=fixed_r)
     return x, y, z
 
-
-
 # Define the function to calculate the intersection with a fixed Z layer
-
 def intersection_fixed_z(eta, phi, fixed_z):
     x, y, z_unit = eta_phi_to_cartesian(eta, phi)
     scale_factor = fixed_z / z_unit
     x *= scale_factor
     y *= scale_factor
     z = fixed_z
-
     return x, y, z
-
-
-
-'''
-TODO:
-1) Load root file for jets  ( /fast_scratch_1/atlas_images/jets )
-2) set up the nested loops, there are 3 in total (outer to inner)
-- Loop 1: Loop through events in root file
-- Identify tracks in event
-- Loop 2: Loop through tracks
-- For each track, identify the tracked particle ID then get the eta and phi coordinates of the track (in EMB2 or EMEC2 if theyre in the end-caps (not sure how to tell yet))
-- Loop 3: loop through all the cells and mark the cell IDs (add to an array?) of those that have a euclidian distance (in eta-phi coordinates) less than MAX_DISTANCE (< 0.2) from the track
-
-We'll stop here then continue with stuff like cell filtering or dealing with overlaps or stuff like that. Make use of awkward arrays where appropriate (awkward library), otherwise use uproot
-'''
-# Printing available keys for diagnostics
-print("Available keys in the dataset:\n ======================")
-for key in events.keys():
-    print(key)
-
-print((events["trackEta_EMB2"].array()[0]))
-print(events["nTrack"].array()[0])
-
-
-trackEtaStr1 = "trackEta_EMB2"  # Barrel eta
-trackPhiStr1 = "trackPhi_EMB2"  # Barrel phi
-trackEtaStr2 = "trackEta_EME2"  # Endcap eta
-trackPhiStr2 = "trackPhi_EME2"  # Endcap phi
 
 # Helper function to calculate delta R using eta and phi directly
 def calculate_delta_r(eta1, phi1, eta2, phi2):
@@ -85,51 +44,47 @@ def calculate_delta_r(eta1, phi1, eta2, phi2):
     deta = eta2 - eta1
     return np.sqrt(deta**2 + dphi**2)
 
-for data in events.iterate([trackEtaStr1, trackPhiStr1, trackEtaStr2, trackPhiStr2, "nTrack",
-                            "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi", "cluster_cell_E"],
-                           library="ak", step_size="100MB"):
+
+# Define the function to calculate the intersection points for each track
+def calculate_track_intersections(track_eta, track_phi):
+    intersections = {}
+    for layer in calo_layers:
+        eta = track_eta[layer]
+        phi = track_phi[layer]
+        # Skip calculation for invalid eta, phi values
+        if eta < -10000 or phi < -10000:
+            continue
+        # Calculate intersection based on layer type
+        if HAS_FIXED_R.get(layer, False):
+            x, y, z = intersection_fixed_r(eta, phi, FIXED_R[layer])
+        elif layer in FIXED_Z:
+            x, y, z = intersection_fixed_z(eta, phi, FIXED_Z[layer])
+        else:
+            # Skip layers without fixed R or Z for simplicity
+            continue
+        intersections[layer] = (x, y, z)
+    return intersections
+
+# Process events and tracks as before, with the following adjustments:
+track_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers]
+
+for data in events.iterate(track_branches + ["nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi", "cluster_cell_E"], library="ak", step_size="100MB"):
     print(f"Processing a batch of {len(data)} events.")
-
     for event_idx, event in enumerate(data):
-        tracks = ak.zip({
-            "eta1": event[trackEtaStr1],
-            "phi1": event[trackPhiStr1],
-            "eta2": event[trackEtaStr2],
-            "phi2": event[trackPhiStr2]
-        })
+        if event_idx > 0:  # Limiting processing for demonstration
+            break
         
-        cells = ak.zip({
-            "ID": event["cluster_cell_ID"],
-            "eta": event["cluster_cell_Eta"],
-            "phi": event["cluster_cell_Phi"],
-            "energy": event["cluster_cell_E"]
-        })
+        # Prepare track eta and phi data for all layers
+        track_eta = {layer: event[f'trackEta_{layer}'] for layer in calo_layers}
+        track_phi = {layer: event[f'trackPhi_{layer}'] for layer in calo_layers}
 
-        # Loop over tracks
-        for track_idx, track in enumerate(tracks):
-            if track.eta1 > -10000:
-                eta = track.eta1
-                phi = track.phi1
-                source = "Barrel"
-            else:
-                eta = track.eta2
-                phi = track.phi2
-                source = "Endcap"
-
+        for track_idx in range(event["nTrack"]):
+            # Calculate intersections for each track
+            track_intersections = calculate_track_intersections({layer: eta[track_idx] for layer, eta in track_eta.items()},
+                                                                {layer: phi[track_idx] for layer, phi in track_phi.items()})
             
-            #if abs(eta) > 10000 or abs(phi) > 10000:  # Additional check for invalid EME2 values
-            #    print(f"Skipped track {track_idx} due to invalid eta/phi")
-            #    continue
-
-            contained_cell_energies = []
-            # Loop over cells
-            for cell in cells:
-                delta_r = calculate_delta_r(eta, phi, cell.eta, cell.phi)
-                
-                # Mask for cells within MAX_DISTANCE of track
-                mask = delta_r < MAX_DISTANCE
-                if ak.any(mask):
-                    contained_cell_energies.extend(ak.to_list(cell.energy[mask]))
-            
-            # Print energies in a flattened list format
-            print(f"Track {track_idx} Source: (Eta: {eta}, Phi: {phi})\ncontains {len(contained_cell_energies)} cells with energies: \n{np.round(contained_cell_energies,2)}\n\n")
+            # Here, you can process track_intersections as needed, e.g., print or use them for further analysis
+            print(f"Track {track_idx} intersects at (X, Y, Z):")
+            for t in track_intersections:
+                print(t, ": ", track_intersections[t])
+            print()
