@@ -12,7 +12,7 @@ from utils.pnet_models import pnet_part_seg_no_tnets, pnet_part_seg
 import awkward as ak
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "0" # SET GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = "4" # SET GPU
 
 
 ## IMPORTANT ## ====== ## DISABLE EAGER EXECUTION WITH TensorFlow!! ##
@@ -29,24 +29,26 @@ MEAN_TRACK_LOG_ENERGY = 2.4
 #LOG_MEAN_TRACK_MOMETUM = 2
 
 # DATA AND OUTPUT DIRS
-data_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho/rho_processed_train_files/'
-#data_dir = '/fast_scratch_1/jbohm/cell_particle_deposit_learning/rho_train/train/'
+data_dir = '/data/mjovanovic/cell_particle_deposit_learning/rho/'
 output_dir = "/data/mjovanovic/cell_particle_deposit_learning/rho_train/KF_regression_Loss_test/"
 max_points_file = '../max_points.txt'
 
-num_train_files = 94 #707
-num_val_files = 3 #210
+num_train_files = 1 #707
 num_test_files = 5 #10
+MAX_NUM_FILES = 65 # there are 65 rho files for use
+if (num_test_files > MAX_NUM_FILES or  num_test_files > MAX_NUM_FILES):
+    print("Too many files selecting, exiting...")
+    exit()
+
 events_per_file = 3800
-start_at_epoch = 25 # False # load start_at_epoch - 1
+start_at_epoch = False # load start_at_epoch - 1
 add_min_track_dist = False
 
 EPOCHS = 100
 BATCH_SIZE = 100
 LEARNING_RATE = 1e-2
-train_output_dir = data_dir# + '/train_1_track/'
-val_output_dir = data_dir + '/val_1_track/'
-test_output_dir = data_dir + '/test_1_track/'
+train_data_dir = data_dir + 'rho_processed_train_files/'
+test_data_dir = data_dir + 'rho_processed_test_files/'
 
 class PrintSamplePredictions(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
@@ -68,7 +70,7 @@ class PrintSamplePredictions(tf.keras.callbacks.Callback):
 def batched_data_generator(file_names, batch_size, max_num_points, validation_split=0.1, is_validation=False, loop_infinite=True, add_min_track_dist=False):
     while True:
         for file in file_names:
-            point_net_data = np.load(file)
+            point_net_data = np.load(file, allow_pickle=True)
             cluster_data = point_net_data['X']
             Y = point_net_data['Y']
 
@@ -130,13 +132,8 @@ def masked_mse_pointwise_loss(y_true, y_pred):
     return masked_loss
 
 def masked_kl_divergence_loss(y_true, y_pred):
-        # Constants to avoid division by zero and log of zero
     epsilon = tf.constant(1e-15, dtype=tf.float32)
-    
-    # Clip y_pred to avoid exact 0 or 1 values
     y_pred = tf.clip_by_value(y_pred, epsilon, 1 - epsilon)
-    
-    # Generate mask to exclude indices where y_true is -1
     mask = tf.cast(tf.not_equal(y_true, -1), dtype=tf.float32)
     
     y_pred_masked = tf.multiply(y_pred,mask)
@@ -145,70 +142,35 @@ def masked_kl_divergence_loss(y_true, y_pred):
     # Calculate KL divergence for each index using filtered values
     kl_divergences = y_true_masked * tf.math.log((y_true_masked + epsilon) / (y_pred_masked + epsilon)) + (1 - y_true_masked) * tf.math.log(((1 - y_true_masked) + epsilon) / ((1 - y_pred_masked) + epsilon))
 
-
-
-
-    # Compute the mean of the KL divergences for the valid indices
     loss = tf.reduce_mean(kl_divergences*mask)
     
     return loss
 
 
 
-train_files = np.sort(glob.glob(train_output_dir+'*.npz'))[:num_train_files]
-val_files = np.sort(glob.glob(val_output_dir+'*.npz'))[:num_val_files]
-test_files = np.sort(glob.glob(test_output_dir+'*.npz'))[:num_test_files]
+train_files = np.sort(glob.glob(train_data_dir+'*.npz'))[:num_train_files]
+test_files = np.sort(glob.glob(test_data_dir+'*.npz'))[:num_test_files]
 
 num_batches_train = (len(train_files) * events_per_file * (1 - 0.1)) // BATCH_SIZE
 num_batches_val = (len(train_files) * events_per_file * 0.1) // BATCH_SIZE
-
 num_batches_test = (len(test_files) * events_per_file) / BATCH_SIZE
 
 # load the max number of points (N) - saved to data dir
-with open(data_dir + max_points_file) as f:
-    N = int(f.readline())
+#with open(data_dir + max_points_file) as f:
+#    N = int(f.readline())
 N = 1180
 
 train_generator = batched_data_generator(train_files, BATCH_SIZE, N, validation_split=0.1, is_validation=False, loop_infinite=True, add_min_track_dist=add_min_track_dist)
 val_generator = batched_data_generator(train_files, BATCH_SIZE, N, validation_split=0.1, is_validation=True, loop_infinite=True, add_min_track_dist=add_min_track_dist)
-test_generator = batched_data_generator(test_files, BATCH_SIZE, N, loop_infinite=False, add_min_track_dist=add_min_track_dist)
-
-
 
 # COMPILE MODEL
 model = pnet_part_seg_no_tnets(N, 5 , 1)
 
-lr_schedule = keras.optimizers.schedules.ExponentialDecay(
-    initial_learning_rate=1e-2,
-    decay_steps=10000,
-    decay_rate=0.9)
-
-decay_rate = 0.1/5
-#opt = tf.optimizers.Adam(learning_rate=LEARNING_RATE)
-#opt = tf.optimizers.SGD(lr=0.1, momentum=0.8)
 opt = tf.optimizers.legacy.Adam(learning_rate=LEARNING_RATE)
 
 model.compile(optimizer=opt,
               loss= masked_kl_divergence_loss,  # or any other loss function suitable for your problem
               metrics=[masked_mae_loss,masked_bce_pointwise_loss, masked_mse_pointwise_loss])  # Add MAE and binary_crossentropy here
-
-
-
-
-# Create a new generator with batch size of 1 for prediction
-single_sample_generator = batched_data_generator(train_files, 1, N, validation_split=0.1, is_validation=False, loop_infinite=False, add_min_track_dist=add_min_track_dist)
-
-# Use the new generator for predictions
-for i, (X_sample, Y_sample) in enumerate(single_sample_generator):
-    output = model.predict(X_sample)
-    print(output)
-    print(X_sample.shape)  # This should now show a batch size of 1
-    print(output.shape)
-    print(output[0])
-    if i >= 0:  # Just to demonstrate with the first sample, remove or adjust this condition as needed
-        break
-
-
 
 model.summary()
 
