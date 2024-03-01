@@ -109,7 +109,8 @@ tracks_sample = ak.ArrayBuilder()
 
 # Process events and tracks as before, with the following adjustments:
 track_layer_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers] # Getting all the cell layer points that the track hits (ie trackEta_EME2, trackPhi_EMB3, etc)
-other_included_fields = ["trackSubtractedCaloEnergy", "trackP", "trackID", "nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi", "cluster_cell_E", "cluster_cell_X","cluster_cell_Y","cluster_cell_Z","cluster_fullHitsTruthIndex","cluster_fullHitsTruthE"]
+other_included_fields = ["trackSubtractedCaloEnergy", "trackP", "trackID", "nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi",
+                          "cluster_cell_E", "cluster_cell_X","cluster_cell_Y","cluster_cell_Z","cluster_fullHitsTruthIndex","cluster_fullHitsTruthE"]
 
 for data in events.iterate(track_layer_branches + other_included_fields, library="ak", step_size="100MB"):
     print(f"Processing a batch of {len(data)} events.")
@@ -173,56 +174,50 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
 
 
             '''
-            GET TRACK ASSOCIATED CELL INFO (Those within deltaR of track)
+            GET ASSOCIATED CELL INFO (Those within deltaR of track)
             ============================================================
             '''
             # Assuming track_eta and track_phi contain the eta and phi for EMB2/EME2 for each track
-            track_eta_location = event["trackEta_EMB2"][track_idx]  # Example for EMB2, adjust as necessary
-            track_phi_location = event["trackPhi_EMB2"][track_idx]  # Example for EMB2, adjust as necessary
+            track_eta_emb2 = event["trackEta_EMB2"][track_idx]  # Example for EMB2, adjust as necessary
+            track_phi_emb2 = event["trackPhi_EMB2"][track_idx]  # Example for EMB2, adjust as necessary
 
-            # Calculate delta R for all cells at once
-            cell_etas = event["cluster_cell_Eta"]
-            cell_phis = event["cluster_cell_Phi"]
-
-            # Calculate delta R for all cells relative to the track
-            delta_rs = calculate_delta_r(track_eta_location, track_phi_location, cell_etas, cell_phis)
-
-            # Create a boolean mask for cells within the 0.2 distance threshold
-            mask = delta_rs <= 0.2
-
-            # Apply the mask directly to filter cells
-            # Since the mask and the cell arrays are both flat and aligned, this direct application is valid
-            filtered_cell_IDs = event["cluster_cell_ID"][mask]
-            filtered_cell_Es = event["cluster_cell_E"][mask]
-            filtered_cell_Etas = cell_etas[mask]
-            filtered_cell_Phis = cell_phis[mask]
-            filtered_cell_Xs = event["cluster_cell_X"][mask]
-            filtered_cell_Ys = event["cluster_cell_Y"][mask]
-            filtered_cell_Zs = event["cluster_cell_Z"][mask]
-
+            # Begin a list to hold cells associated with this track
             tracks_sample.field("associated_cells")
             tracks_sample.begin_list()
 
-            # Directly iterate over the elements of the filtered arrays
-            for ID, E, Eta, Phi, X, Y, Z in zip(filtered_cell_IDs, filtered_cell_Es, filtered_cell_Etas, filtered_cell_Phis, filtered_cell_Xs, filtered_cell_Ys, filtered_cell_Zs):
-                tracks_sample.begin_record()
-                tracks_sample.field("ID")
-                tracks_sample.integer(ID)  # ID is already a scalar here
-                tracks_sample.field("E")
-                tracks_sample.real(E)
-                tracks_sample.field("Eta")
-                tracks_sample.real(Eta)
-                tracks_sample.field("Phi")
-                tracks_sample.real(Phi)
-                tracks_sample.field("X")
-                tracks_sample.real(X)
-                tracks_sample.field("Y")
-                tracks_sample.real(Y)
-                tracks_sample.field("Z")
-                tracks_sample.real(Z)
-                tracks_sample.end_record()
+            # Iterate over each cell in the event
+            for cell_idx in range(len(event["cluster_cell_Eta"])):
+                cell_eta = event["cluster_cell_Eta"][cell_idx]
+                cell_phi = event["cluster_cell_Phi"][cell_idx]
+                
+                # Calculate delta R between the track and cell
+                delta_r = calculate_delta_r(track_eta_emb2, track_phi_emb2, cell_eta, cell_phi)
+                
+                # Check if the cell is within the 0.2 distance threshold
+                if delta_r <= 0.2:
+                    # If within threshold, add the cell's information
+                    tracks_sample.begin_record()
+                    tracks_sample.field("ID")
+                    tracks_sample.integer(event["cluster_cell_ID"][cell_idx])
+                    tracks_sample.field("E")
+                    tracks_sample.real(event["cluster_cell_E"][cell_idx])
+                    tracks_sample.field("Eta")
+                    tracks_sample.real(cell_eta)
+                    tracks_sample.field("Phi")
+                    tracks_sample.real(cell_phi)
+                    tracks_sample.field("X")
+                    tracks_sample.real(event["cluster_cell_X"][cell_idx])
+                    tracks_sample.field("Y")
+                    tracks_sample.real(event["cluster_cell_Y"][cell_idx])
+                    tracks_sample.field("Z")
+                    tracks_sample.real(event["cluster_cell_Z"][cell_idx])
+                    tracks_sample.field("fullHitsTruthIndex")
+                    tracks_sample.integer(event["cluster_fullHitsTruthIndex"][cell_idx])
+                    tracks_sample.field("fullHitsTruthE")
+                    tracks_sample.real(event["cluster_fullHitsTruthE"][cell_idx])
+                    tracks_sample.end_record()
 
-            tracks_sample.end_list()
+            tracks_sample.end_list()  # End list of associated cells
             '''
             ============================================================
             =======
