@@ -19,11 +19,6 @@ events = uproot.open(FILE_LOC + ":EventTree")
 for key in events.keys():
     print(key)
 
-
-print(events["trackSubtractedCaloEnergy"].array()[0])
-
-
-
 '''
 Done:
 - Load in dataset
@@ -31,7 +26,7 @@ Done:
 
 Next:
 - Outline what you need in outcome (what in labels, what in features, look at the feats/labels data you have already)
-    - First, extract the cells from the event (for each cell, get its ID, eta/phi in EMB2 and EME2), and its cell_E (measured)
+    - First, extract the tracks from the event (for each cell, get its ID, eta/phi in EMB2 and EME2), and its cell_E (measured)
     - Should be a track item, and in each track item:
         - the track info:
             - event number index
@@ -40,6 +35,7 @@ Next:
             - EMB2 eta/phi (or EME2 if it doesnt hit that, can check metadata)
             - track point energy
             - include (as another single value info field) the total amount of energy (cell E) in the track window
+            - Also the missing energy meme for testing metric
         - the cells within the deltaR distance (of the track eta/phi of the track) (include the fields from the "First, extract..." line)
             - include the minimum track distance (find the distance between the cell and the closest track point) for each cell
         - Indices of any tracks that fall within the focused track's EMB/EME eta/phi (so we can extract their x/y/z/E values later)
@@ -53,6 +49,7 @@ After:
         Note: focused track will always be 1.0, unfocused track will always be 0.0 and the mask will be -1 (remember to find maximum number of cells hit by a track in dataset)
 
 - Then, do final processing, format it into numpy files, and save!
+- optimize for efficiency, file numbers and save space after 
 '''
 
 # Define the function to convert eta and phi to cartesian coordinates
@@ -99,31 +96,134 @@ def calculate_track_intersections(track_eta, track_phi):
         elif layer in FIXED_Z:
             x, y, z = intersection_fixed_z(eta, phi, FIXED_Z[layer])
         else:
-            # Skip layers without fixed R or Z for simplicity
-            continue
+            raise Exception("Error: cell layers must either be fixed R or fixed Z, and not neither")
         intersections[layer] = (x, y, z)
     return intersections
 
-# Process events and tracks as before, with the following adjustments:
-track_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers]
+# Before the loop, initialize the awkward array structure for track samples
+tracks_sample = ak.ArrayBuilder()
 
-for data in events.iterate(track_branches + ["nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi", "cluster_cell_E"], library="ak", step_size="100MB"):
+# Process events and tracks as before, with the following adjustments:
+track_layer_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers] # Getting all the cell layer points that the track hits (ie trackEta_EME2, trackPhi_EMB3, etc)
+other_included_fields = ["trackSubtractedCaloEnergy", "trackID", "nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi", "cluster_cell_E"]
+
+for data in events.iterate(track_layer_branches + other_included_fields, library="ak", step_size="100MB"):
     print(f"Processing a batch of {len(data)} events.")
     for event_idx, event in enumerate(data):
         if event_idx > 0:  # Limiting processing for demonstration
             break
-        
-        # Prepare track eta and phi data for all layers
+
+        tracks_sample.begin_list()  # Start a new list for each event to hold tracks
+
+        # Prepare track eta and phi data for all layers (dictionary used for track X, Y, Z calculation)
         track_eta = {layer: event[f'trackEta_{layer}'] for layer in calo_layers}
         track_phi = {layer: event[f'trackPhi_{layer}'] for layer in calo_layers}
 
+
+        # Initialize awkward array data structure for features
+
         for track_idx in range(event["nTrack"]):
+            tracks_sample.begin_record()  # Each track is a record within the event list
+
+            '''
+            GET TRACK META INFO
+            ============================================================
+            '''
+                
+            # Event ID (assuming event index can serve as an ID)
+            tracks_sample.field("eventID")
+            tracks_sample.integer(event_idx)
+            
+            # Track Particle ID (assuming a placeholder name, replace with actual field name)
+            tracks_sample.field("trackID")
+            tracks_sample.integer(event["trackID"][track_idx])  # Adjust field name as necessary
+            
+            # Track's eta in EMB2 (replace 'trackEta_EMB2' with actual field name if different)
+            tracks_sample.field("trackEta_EMB2")
+            tracks_sample.real(event["trackEta_EMB2"][track_idx])  # Adjust field name as necessary
+            
+            # Track's phi in EMB2 (replace 'trackPhi_EMB2' with actual field name if different)
+            tracks_sample.field("trackPhi_EMB2")
+            tracks_sample.real(event["trackPhi_EMB2"][track_idx])  # Adjust field name as necessary
+            
+            # Assuming similar fields exist for EME2, replace with actual names if different
+            # Track's eta in EME2
+            tracks_sample.field("trackEta_EME2")
+            tracks_sample.real(event["trackEta_EME2"][track_idx])  # Adjust field name as necessary
+            
+            # Track's phi in EME2
+            tracks_sample.field("trackPhi_EME2")
+            tracks_sample.real(event["trackPhi_EME2"][track_idx])  # Adjust field name as necessary
+            
+            # Missing Energy Metric (assuming a placeholder name, replace with actual field name)
+            tracks_sample.field("trackSubtractedCaloEnergy")
+            tracks_sample.real(event["trackSubtractedCaloEnergy"][track_idx])  # Adjust field name as necessary
+
+            '''
+            ============================================================
+            =======
+            '''
+
+
+
+            '''
+            GET TRACK ASSOCIATED CELL INFO (Those within deltaR of track)
+            ============================================================
+            '''
+
+
+            '''
+            ============================================================
+            =======
+            '''
+
+
+
+
+            '''
+            CALCULATING TRACK X, Y, Z PATH POINTS (INTERSECTIONS WITH CELL LAYERS)
+            ============================================================
+            '''
             # Calculate intersections for each track
             track_intersections = calculate_track_intersections({layer: eta[track_idx] for layer, eta in track_eta.items()},
                                                                 {layer: phi[track_idx] for layer, phi in track_phi.items()})
             
             # Here, you can process track_intersections as needed, e.g., print or use them for further analysis
-            print(f"Track {track_idx} intersects at (X, Y, Z):")
-            for t in track_intersections:
-                print(t, ": ", track_intersections[t])
-            print()
+            #print(f"Track {track_idx} intersects at (X, Y, Z):")
+            #for t in track_intersections:
+            #    print(t, ": ", track_intersections[t])
+            #print()
+            '''
+            ============================================================
+            =======
+            '''
+
+
+
+            '''
+            GET (trackwise) CELL/TRACK POINT LABELS
+            ============================================================
+            '''
+
+
+            '''
+            ============================================================
+            =======
+            '''
+            tracks_sample.end_record()  # End the record for the current track
+
+        tracks_sample.end_list()  # End the list for the current event
+
+# After processing, convert the ArrayBuilder to an actual Awkward array and print it
+tracks_sample_array = tracks_sample.snapshot()
+
+# Loop through each event in the array
+for event in ak.to_list(tracks_sample_array):
+    print("New event")
+    # Each event can contain multiple tracks
+    for track in event:
+        print("  Track")
+        # Now, print each field and its value for the track
+        for field in track:
+            value = track[field]
+            print(f"    {field}: {value}")
