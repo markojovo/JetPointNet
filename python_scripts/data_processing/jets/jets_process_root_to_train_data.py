@@ -3,6 +3,7 @@ import awkward as ak
 import numpy as np
 import vector
 import sys
+import matplotlib.pyplot as plt
 sys.path.append("/home/mjovanovic/Work/PointNet_Segmentation")
 from utils.track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
 HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
@@ -12,6 +13,7 @@ FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
 GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
 
 
+NUM_EVENTS_TO_USE = 500
 
 # Maximum distance for cell and track identification
 MAX_DISTANCE = 1.6
@@ -27,7 +29,6 @@ for key in events.keys():
 print("\nGeometry Keys:")
 for key in cellgeo.keys():
     print(key)
-
 
 '''
 Done:
@@ -117,12 +118,12 @@ tracks_sample = ak.ArrayBuilder()
 # Process events and tracks as before, with the following adjustments:
 track_layer_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers] # Getting all the cell layer points that the track hits (ie trackEta_EME2, trackPhi_EMB3, etc)
 other_included_fields = ["trackSubtractedCaloEnergy", "trackPt", "trackID", "nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi",
-                          "cluster_cell_E", "cluster_cell_X","cluster_cell_Y","cluster_cell_Z","cluster_fullHitsTruthIndex","cluster_fullHitsTruthE"]
+                          "trackNumberDOF","trackChiSquared","cluster_cell_E", "cluster_cell_X","cluster_cell_Y","cluster_cell_Z","cluster_fullHitsTruthIndex","cluster_fullHitsTruthE"]
 
 for data in events.iterate(track_layer_branches + other_included_fields, library="ak", step_size="500MB"):
     print(f"Processing a batch of {len(data)} events.")
     for event_idx, event in enumerate(data):
-        if event_idx > 0:  # Limiting processing for demonstration
+        if event_idx >= NUM_EVENTS_TO_USE:  # Limiting processing for demonstration
             break
 
         '''
@@ -193,6 +194,8 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
                 ("trackPhi_EME2", "real"),
                 ("trackSubtractedCaloEnergy", "real"),
                 ("trackPt", "real"),
+                ("trackNumberDOF", "integer"),
+                ("trackChiSquared", "real")
             ]
 
             # Looped version instead of doing this (a 2-line example): tracks_sample.field("trackEta_EMB2") \ tracks_sample.real(event["trackEta_EMB2"][track_idx])  
@@ -236,7 +239,7 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
             delta_r = calculate_delta_r(track_eta_ref, track_phi_ref, cell_eta, cell_phi)
 
             # Creating a mask for cells within the delta R threshold of 0.2
-            mask = delta_r <= 0.2 
+            mask = delta_r <= MAX_DISTANCE
             '''
             NOTE:
                 This is returning some masks where NO cells (that are part of any cluster) are within the eta/phi range of the track.
@@ -339,3 +342,28 @@ for event in ak.to_list(tracks_sample_array):
                 print(f"    {field}: {value}")
 
         print()
+
+''' Plotting Example
+# Assuming `tracks_sample_array` is the awkward array containing all the track information
+filtered_trackPts = []
+filtered_trackEtas = []
+
+for event in tracks_sample_array:
+    for track in event:
+        if len(track['associated_cells']) == 0:
+            filtered_trackPts.append(track['trackNumberDOF'])
+            filtered_trackEtas.append(track['trackChiSquared'])
+
+# Convert lists to numpy arrays for plotting
+filtered_trackPts = np.array(filtered_trackPts)
+filtered_trackEtas = np.array(filtered_trackEtas)
+
+# Now plot the 2D histogram
+plt.figure(figsize=(10, 7))
+plt.hist2d(filtered_trackEtas, filtered_trackPts, bins=[50, 50], cmap='viridis')
+plt.colorbar(label='Number of Tracks')
+plt.xlabel('Track Track Num DOF')
+plt.ylabel('Track Track $\chi^2$')
+plt.title(f'2D Histogram of Tracks No Associated Cells over {NUM_EVENTS_TO_USE} events')
+plt.show()
+'''
