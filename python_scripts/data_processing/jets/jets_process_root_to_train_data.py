@@ -9,19 +9,24 @@ HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
 
 # Path to the ROOT file containing jet events
 FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
+GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
+
+
 
 # Maximum distance for cell and track identification
 MAX_DISTANCE = 1.6
 
 # Open the ROOT file and access the EventTree
 events = uproot.open(FILE_LOC + ":EventTree")
+cellgeo = uproot.open(GEO_FILE_LOC + ":CellGeo")
 
+print("Events Keys:")
 for key in events.keys():
     print(key)
 
-print(events["trackID"].array()[0])
-print(events["trackP"].array()[0])
-
+print("\nGeometry Keys:")
+for key in cellgeo.keys():
+    print(key)
 
 '''
 Done:
@@ -92,8 +97,9 @@ def calculate_track_intersections(track_eta, track_phi):
         eta = track_eta[layer]
         phi = track_phi[layer]
         # Skip calculation for invalid eta, phi values
-        if eta < -10000 or phi < -10000:
+        if eta < -100000 or phi < -100000:
             continue
+
         # Calculate intersection based on layer type
         if HAS_FIXED_R.get(layer, False):
             x, y, z = intersection_fixed_r(eta, phi, FIXED_R[layer])
@@ -109,16 +115,58 @@ tracks_sample = ak.ArrayBuilder()
 
 # Process events and tracks as before, with the following adjustments:
 track_layer_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers] # Getting all the cell layer points that the track hits (ie trackEta_EME2, trackPhi_EMB3, etc)
-other_included_fields = ["trackSubtractedCaloEnergy", "trackP", "trackID", "nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi",
+other_included_fields = ["trackSubtractedCaloEnergy", "trackPt", "trackID", "nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi",
                           "cluster_cell_E", "cluster_cell_X","cluster_cell_Y","cluster_cell_Z","cluster_fullHitsTruthIndex","cluster_fullHitsTruthE"]
 
-for data in events.iterate(track_layer_branches + other_included_fields, library="ak", step_size="100MB"):
+for data in events.iterate(track_layer_branches + other_included_fields, library="ak", step_size="500MB"):
     print(f"Processing a batch of {len(data)} events.")
     for event_idx, event in enumerate(data):
-        if event_idx > 0:  # Limiting processing for demonstration
+        if event_idx > 5:  # Limiting processing for demonstration
             break
 
+        '''
+        GRABBING ONLY CLUSTERED CELLS, SO WE CAN IGNORE ANY CELLS NOT IN ANY CLUSTER
+        (THEN UNFLATTENING SO WE HAVE A MASTER LIST OF FILTERED CELLS FOR THIS EVENT)
+        ============================================================
+        '''
+        # Assuming `events` is your dataset, and it has cluster_cell_ID, cluster_cell_E, cluster_cell_eta, cluster_cell_phi
+        cell_IDs = ak.flatten(event['cluster_cell_ID'])
+        cell_Es = ak.flatten(event['cluster_cell_E'])
+        cell_etas = ak.flatten(event['cluster_cell_Eta'])
+        cell_phis = ak.flatten(event['cluster_cell_Phi'])
+        cell_Xs = ak.flatten(event['cluster_cell_X'])  
+        cell_Ys = ak.flatten(event['cluster_cell_Y'])  
+        cell_Zs = ak.flatten(event['cluster_cell_Z'])  
+
+        # To get the first occurrence indices of each unique ID
+        _, unique_indices = np.unique(ak.to_numpy(cell_IDs), return_index=True)
+
+        # Now use these indices to select the corresponding E, eta, and phi values
+        unique_cell_IDs = cell_IDs[unique_indices]
+        unique_cell_Es = cell_Es[unique_indices]
+        unique_cell_etas = cell_etas[unique_indices]
+        unique_cell_phis = cell_phis[unique_indices]
+        unique_cell_Xs = cell_Xs[unique_indices]
+        unique_cell_Ys = cell_Ys[unique_indices] 
+        unique_cell_Zs = cell_Zs[unique_indices] 
+
+        # Recombine into a new Awkward Array if needed
+        event_cells = ak.zip({
+            'ID': unique_cell_IDs,
+            'E': unique_cell_Es,
+            'eta': unique_cell_etas,
+            'phi': unique_cell_phis,
+            'X': unique_cell_Xs,  
+            'Y': unique_cell_Ys,  
+            'Z': unique_cell_Zs   
+        })
+        '''
+        ============================================================
+        =======
+        '''
+
         tracks_sample.begin_list()  # Start a new list for each event to hold tracks
+
 
         # Prepare track eta and phi data for all layers (dictionary used for track X, Y, Z calculation)
         track_eta = {layer: event[f'trackEta_{layer}'] for layer in calo_layers}
@@ -134,38 +182,40 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
             GET TRACK META INFO
             ============================================================
             '''
-            # Event ID (assuming event index can serve as an ID)
-            tracks_sample.field("eventID")
-            tracks_sample.integer(event_idx)
-            
-            # Track Particle ID (assuming a placeholder name, replace with actual field name)
-            tracks_sample.field("trackID")
-            tracks_sample.integer(event["trackID"][track_idx])  # Adjust field name as necessary
-            
-            # Track's eta in EMB2 (replace 'trackEta_EMB2' with actual field name if different)
-            tracks_sample.field("trackEta_EMB2")
-            tracks_sample.real(event["trackEta_EMB2"][track_idx])  # Adjust field name as necessary
-            
-            # Track's phi in EMB2 (replace 'trackPhi_EMB2' with actual field name if different)
-            tracks_sample.field("trackPhi_EMB2")
-            tracks_sample.real(event["trackPhi_EMB2"][track_idx])  # Adjust field name as necessary
-            
-            # Assuming similar fields exist for EME2, replace with actual names if different
-            # Track's eta in EME2
-            tracks_sample.field("trackEta_EME2")
-            tracks_sample.real(event["trackEta_EME2"][track_idx])  # Adjust field name as necessary
-            
-            # Track's phi in EME2
-            tracks_sample.field("trackPhi_EME2")
-            tracks_sample.real(event["trackPhi_EME2"][track_idx])  # Adjust field name as necessary
-            
-            # Missing Energy Metric (assuming a placeholder name, replace with actual field name)
-            tracks_sample.field("trackSubtractedCaloEnergy")
-            tracks_sample.real(event["trackSubtractedCaloEnergy"][track_idx])  # Adjust field name as necessary
+            # List of field names and their types
+            fields = [
+                ("eventID", "integer"),
+                ("trackID", "integer"),
+                ("trackEta_EMB2", "real"),
+                ("trackPhi_EMB2", "real"),
+                ("trackEta_EME2", "real"),
+                ("trackPhi_EME2", "real"),
+                ("trackSubtractedCaloEnergy", "real"),
+                ("trackPt", "real"),
+            ]
 
-            # Track's phi in EME2
-            tracks_sample.field("trackP")
-            tracks_sample.real(event["trackP"][track_idx])  # Adjust field name as necessary
+            # Looped version instead of doing this (a 2-line example): tracks_sample.field("trackEta_EMB2") \ tracks_sample.real(event["trackEta_EMB2"][track_idx])  
+            for field_name, field_type in fields:
+                tracks_sample.field(field_name)
+                if field_name in ["eventID", "trackID"]:  # Handle integer fields
+                    if field_name == "eventID":
+                        tracks_sample.integer(event_idx)  # Assuming event_idx is the ID
+                    else:  # For trackID, fetch from the event dictionary
+                        tracks_sample.integer(event[field_name][track_idx])
+                else:  # Handle real number fields
+                    if not event[field_name][track_idx] < -100000:
+                        tracks_sample.real(event[field_name][track_idx])
+
+            track_eta_ref = event["trackEta_EMB2"][track_idx]  
+            track_phi_ref = event["trackPhi_EMB2"][track_idx]  
+            if track_eta_ref < -100000:
+                track_eta_ref = event["trackEta_EME2"][track_idx] 
+                track_phi_ref = event["trackPhi_EME2"][track_idx] 
+            tracks_sample.field("trackEta")
+            tracks_sample.real(track_eta_ref)
+
+            tracks_sample.field("trackPhi")
+            tracks_sample.real(track_phi_ref)
             '''
             ============================================================
             =======
@@ -177,47 +227,45 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
             GET ASSOCIATED CELL INFO (Those within deltaR of track)
             ============================================================
             '''
-            # Assuming track_eta and track_phi contain the eta and phi for EMB2/EME2 for each track
-            track_eta_emb2 = event["trackEta_EMB2"][track_idx]  # Example for EMB2, adjust as necessary
-            track_phi_emb2 = event["trackPhi_EMB2"][track_idx]  # Example for EMB2, adjust as necessary
+            # Use cell eta and phi directly from the `cells` structured array
+            cell_eta = event_cells['eta']
+            cell_phi = event_cells['phi']
 
-            # Begin a list to hold cells associated with this track
+            # Vectorized calculation of delta R for all cells with respect to the track
+            delta_r = calculate_delta_r(track_eta_ref, track_phi_ref, cell_eta, cell_phi)
+
+            # Creating a mask for cells within the delta R threshold of 0.2
+            mask = delta_r <= 0.2 
+            '''
+            NOTE:
+                This is returning some masks where NO cells (that are part of any cluster) are within the eta/phi range of the track.
+                This is weird, since everywhere (except eta > ~5) should have at least some cells near it
+                Check:
+                    The cells are being filtered by clustering?
+                    The delta_R calculation is weird (ie not considering rollover)
+            '''
+
+            # Apply the mask to filter cells directly using Awkward Array's boolean masking
+            filtered_cells = event_cells[mask]
+
+            # Preparing to add the filtered cells to the track sample
             tracks_sample.field("associated_cells")
             tracks_sample.begin_list()
 
-            # Iterate over each cell in the event
-            for cell_idx in range(len(event["cluster_cell_Eta"])):
-                cell_eta = event["cluster_cell_Eta"][cell_idx]
-                cell_phi = event["cluster_cell_Phi"][cell_idx]
-                
-                # Calculate delta R between the track and cell
-                delta_r = calculate_delta_r(track_eta_emb2, track_phi_emb2, cell_eta, cell_phi)
-                
-                # Check if the cell is within the 0.2 distance threshold
-                if delta_r <= 0.2:
-                    # If within threshold, add the cell's information
-                    tracks_sample.begin_record()
-                    tracks_sample.field("ID")
-                    tracks_sample.integer(event["cluster_cell_ID"][cell_idx])
-                    tracks_sample.field("E")
-                    tracks_sample.real(event["cluster_cell_E"][cell_idx])
-                    tracks_sample.field("Eta")
-                    tracks_sample.real(cell_eta)
-                    tracks_sample.field("Phi")
-                    tracks_sample.real(cell_phi)
-                    tracks_sample.field("X")
-                    tracks_sample.real(event["cluster_cell_X"][cell_idx])
-                    tracks_sample.field("Y")
-                    tracks_sample.real(event["cluster_cell_Y"][cell_idx])
-                    tracks_sample.field("Z")
-                    tracks_sample.real(event["cluster_cell_Z"][cell_idx])
-                    tracks_sample.field("fullHitsTruthIndex")
-                    tracks_sample.integer(event["cluster_fullHitsTruthIndex"][cell_idx])
-                    tracks_sample.field("fullHitsTruthE")
-                    tracks_sample.real(event["cluster_fullHitsTruthE"][cell_idx])
-                    tracks_sample.end_record()
+            # Iterate over filtered cells, now correctly filtered with delta_r <= 0.2
+            for cell in filtered_cells:
+                tracks_sample.begin_record()
+                tracks_sample.field("ID").integer(cell["ID"])
+                tracks_sample.field("X").real(cell["X"])
+                tracks_sample.field("Y").real(cell["Y"])
+                tracks_sample.field("Z").real(cell["Z"])
+                tracks_sample.field("E").real(cell["E"])
+                tracks_sample.field("eta").real(cell["eta"])
+                tracks_sample.field("phi").real(cell["phi"])
+                tracks_sample.end_record()
 
-            tracks_sample.end_list()  # End list of associated cells
+            tracks_sample.end_list()
+
             '''
             ============================================================
             =======
@@ -241,11 +289,11 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
                 tracks_sample.begin_record()  # Each intersection point is a record
                 tracks_sample.field("layer")
                 tracks_sample.string(layer)
-                tracks_sample.field("x")
+                tracks_sample.field("X")
                 tracks_sample.real(x)
-                tracks_sample.field("y")
+                tracks_sample.field("Y")
                 tracks_sample.real(y)
-                tracks_sample.field("z")
+                tracks_sample.field("Z")
                 tracks_sample.real(z)
                 tracks_sample.end_record()  # End the record for this intersection point
             tracks_sample.end_list()  # End list of intersection points
@@ -282,5 +330,11 @@ for event in ak.to_list(tracks_sample_array):
         # Now, print each field and its value for the track
         for field in track:
             value = track[field]
-            print(f"    {field}: {value}")
+            if field == "track_layer_intersections" or field == "associated_cells":
+                print(f"    {field}:")
+                for intpoint in value:
+                    print(f"        {intpoint}")
+            else:
+                print(f"    {field}: {value}")
+
         print()
