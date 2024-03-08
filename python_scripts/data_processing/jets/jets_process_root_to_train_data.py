@@ -13,10 +13,10 @@ FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
 GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
 
 
-NUM_EVENTS_TO_USE = 500
+NUM_EVENTS_TO_USE = 5
 
 # Maximum distance for cell and track identification
-MAX_DISTANCE = 1.6
+MAX_DISTANCE = 0.2
 
 # Open the ROOT file and access the EventTree
 events = uproot.open(FILE_LOC + ":EventTree")
@@ -193,9 +193,9 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
                 ("trackEta_EME2", "real"),
                 ("trackPhi_EME2", "real"),
                 ("trackSubtractedCaloEnergy", "real"),
-                ("trackPt", "real"),
-                ("trackNumberDOF", "integer"),
-                ("trackChiSquared", "real")
+                ("trackPt", "real")
+                #("trackNumberDOF", "integer"),
+                #("trackChiSquared", "real")
             ]
 
             # Looped version instead of doing this (a 2-line example): tracks_sample.field("trackEta_EMB2") \ tracks_sample.real(event["trackEta_EMB2"][track_idx])  
@@ -224,59 +224,6 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
             ============================================================
             =======
             '''
-
-
-
-            '''
-            GET ASSOCIATED CELL INFO (Those within deltaR of track)
-            ============================================================
-            '''
-            # Use cell eta and phi directly from the `cells` structured array
-            cell_eta = event_cells['eta']
-            cell_phi = event_cells['phi']
-
-            # Vectorized calculation of delta R for all cells with respect to the track
-            delta_r = calculate_delta_r(track_eta_ref, track_phi_ref, cell_eta, cell_phi)
-
-            # Creating a mask for cells within the delta R threshold of 0.2
-            mask = delta_r <= MAX_DISTANCE
-            '''
-            NOTE:
-                This is returning some masks where NO cells (that are part of any cluster) are within the eta/phi range of the track.
-                This is weird, since everywhere (except eta > ~5) should have at least some cells near it
-                Check:
-                    The cells are being filtered by clustering?
-                    The delta_R calculation is weird (ie not considering rollover)
-            '''
-
-            # Apply the mask to filter cells directly using Awkward Array's boolean masking
-            filtered_cells = event_cells[mask]
-
-            # Preparing to add the filtered cells to the track sample
-            tracks_sample.field("associated_cells")
-            tracks_sample.begin_list()
-
-            # Iterate over filtered cells, now correctly filtered with delta_r <= 0.2
-            for cell in filtered_cells:
-                tracks_sample.begin_record()
-                tracks_sample.field("ID").integer(cell["ID"])
-                tracks_sample.field("X").real(cell["X"])
-                tracks_sample.field("Y").real(cell["Y"])
-                tracks_sample.field("Z").real(cell["Z"])
-                tracks_sample.field("E").real(cell["E"])
-                tracks_sample.field("eta").real(cell["eta"])
-                tracks_sample.field("phi").real(cell["phi"])
-                tracks_sample.end_record()
-
-            tracks_sample.end_list()
-
-            '''
-            ============================================================
-            =======
-            '''
-
-
-
 
             '''
             CALCULATING TRACK X, Y, Z PATH POINTS (INTERSECTIONS WITH CELL LAYERS)
@@ -308,11 +255,73 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
 
 
 
+
             '''
-            GET (trackwise) CELL/TRACK POINT LABELS
+            GET ASSOCIATED CELL INFO (Those within deltaR of track)
             ============================================================
             '''
+            # Use cell eta and phi directly from the `cells` structured array
+            cell_eta = event_cells['eta']
+            cell_phi = event_cells['phi']
 
+            # Vectorized calculation of delta R for all cells with respect to the track
+            delta_r = calculate_delta_r(track_eta_ref, track_phi_ref, cell_eta, cell_phi)
+
+            # Creating a mask for cells within the delta R threshold of 0.2
+            mask = delta_r <= MAX_DISTANCE
+            '''
+            NOTE:
+                This is returning some masks where NO cells (that are part of any cluster) are within the eta/phi range of the track.
+                This is weird, since everywhere (except eta > ~5) should have at least some cells near it
+                Check:
+                    The cells are being filtered by clustering?
+                    The delta_R calculation is weird (ie not considering rollover)
+            '''
+
+            # Apply the mask to filter cells directly using Awkward Array's boolean masking
+            filtered_cells = event_cells[mask]
+            tracks_sample.field("total_associated_cell_energy").real(sum(filtered_cells["E"]))
+
+            # Preparing to add the filtered cells to the track sample
+            tracks_sample.field("associated_cells")
+            tracks_sample.begin_list()
+
+            track_intersection_points = [(x, y, z) for layer, (x, y, z) in track_intersections.items()]
+            # Iterate over filtered cells, now correctly filtered with delta_r <= 0.2
+            for cell in filtered_cells:
+                tracks_sample.begin_record()
+                tracks_sample.field("ID").integer(cell["ID"])
+                tracks_sample.field("E").real(cell["E"])
+                tracks_sample.field("X").real(cell["X"])
+                tracks_sample.field("Y").real(cell["Y"])
+                tracks_sample.field("Z").real(cell["Z"])
+                # Calculate distances to each track intersection point and find the minimum
+                cell_x, cell_y, cell_z = cell["X"], cell["Y"], cell["Z"]
+                min_distance = min(
+                    np.sqrt((x - cell_x) ** 2 + (y - cell_y) ** 2 + (z - cell_z) ** 2)
+                    for x, y, z in track_intersection_points
+                )
+                tracks_sample.field("distance_to_track").real(min_distance)
+                tracks_sample.field("eta").real(cell["eta"])
+                tracks_sample.field("phi").real(cell["phi"])
+
+
+                tracks_sample.end_record()
+                
+
+            tracks_sample.end_list()
+
+            '''
+            ============================================================
+            =======
+            '''
+
+
+
+            '''
+            GET MINIMUM DISTANCE FROM CELL TO CENTER TRACK
+            ============================================================
+            '''
 
             '''
             ============================================================
@@ -325,7 +334,6 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
 # After processing, convert the ArrayBuilder to an actual Awkward array and print it
 tracks_sample_array = tracks_sample.snapshot()
 
-# Loop through each event in the array
 for event in ak.to_list(tracks_sample_array):
     print("New event")
     # Each event can contain multiple tracks
@@ -337,33 +345,11 @@ for event in ak.to_list(tracks_sample_array):
             if field == "track_layer_intersections" or field == "associated_cells":
                 print(f"    {field}:")
                 for intpoint in value:
-                    print(f"        {intpoint}")
+                    formatted_intpoint = {k: (f"{v:.4f}" if isinstance(v, float) else v) for k, v in intpoint.items()}
+                    print(f"        {formatted_intpoint}")
             else:
-                print(f"    {field}: {value}")
-
+                if isinstance(value, float):  # Check if the value is a float and format it
+                    print(f"    {field}: {value:.4f}")
+                else:  # If not a float, print the value as is
+                    print(f"    {field}: {value}")
         print()
-
-''' Plotting Example
-# Assuming `tracks_sample_array` is the awkward array containing all the track information
-filtered_trackPts = []
-filtered_trackEtas = []
-
-for event in tracks_sample_array:
-    for track in event:
-        if len(track['associated_cells']) == 0:
-            filtered_trackPts.append(track['trackNumberDOF'])
-            filtered_trackEtas.append(track['trackChiSquared'])
-
-# Convert lists to numpy arrays for plotting
-filtered_trackPts = np.array(filtered_trackPts)
-filtered_trackEtas = np.array(filtered_trackEtas)
-
-# Now plot the 2D histogram
-plt.figure(figsize=(10, 7))
-plt.hist2d(filtered_trackEtas, filtered_trackPts, bins=[50, 50], cmap='viridis')
-plt.colorbar(label='Number of Tracks')
-plt.xlabel('Track Track Num DOF')
-plt.ylabel('Track Track $\chi^2$')
-plt.title(f'2D Histogram of Tracks No Associated Cells over {NUM_EVENTS_TO_USE} events')
-plt.show()
-'''
