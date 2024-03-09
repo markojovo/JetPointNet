@@ -12,7 +12,6 @@ HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
 FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
 GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
 
-
 NUM_EVENTS_TO_USE = 5
 
 # Maximum distance for cell and track identification
@@ -26,9 +25,10 @@ print("Events Keys:")
 for key in events.keys():
     print(key)
 
-#print("\nGeometry Keys:")
-#for key in cellgeo.keys():
-#    print(key)
+
+print("\nGeometry Keys:")
+for key in cellgeo.keys():
+    print(key)
 
 #print(events["trackTruthParticleIndex"].array()[0])
 #print(events["cluster_cell_hitsTruthIndex"].array()[0])
@@ -122,10 +122,13 @@ tracks_sample = ak.ArrayBuilder()
 
 # Process events and tracks as before, with the following adjustments:
 track_layer_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers] # Getting all the cell layer points that the track hits (ie trackEta_EME2, trackPhi_EMB3, etc)
-other_included_fields = ["trackSubtractedCaloEnergy", "trackPt", "trackID", "nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi",
+
+jets_other_included_fields = ["trackSubtractedCaloEnergy", "trackPt", "trackID", "nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi",
                           "trackNumberDOF","trackChiSquared","cluster_cell_E", "cluster_cell_X","cluster_cell_Y","cluster_cell_Z","cluster_fullHitsTruthIndex","cluster_fullHitsTruthE"]
 
-for data in events.iterate(track_layer_branches + other_included_fields, library="ak", step_size="500MB"):
+fields_list = track_layer_branches + jets_other_included_fields
+
+for data in events.iterate(fields_list, library="ak", step_size="500MB"):
     print(f"Processing a batch of {len(data)} events.")
     for event_idx, event in enumerate(data):
         if event_idx >= NUM_EVENTS_TO_USE:  # Limiting processing for demonstration
@@ -324,10 +327,65 @@ for data in events.iterate(track_layer_branches + other_included_fields, library
 
 
             '''
-            GET MINIMUM DISTANCE FROM CELL TO CENTER TRACK
+            GET ASSOCIATED TRACKS (Those within deltaR of the track's eta/phi)
             ============================================================
             '''
+            # Initialize the field for adjacent tracks
+            tracks_sample.field("associated_tracks")
+            tracks_sample.begin_list()  # Begin list of adjacent tracks for this track
 
+            # Calculate eta/phi for the focal track
+            focal_eta = track_eta_ref  # Defined in your existing code
+            focal_phi = track_phi_ref  # Defined in your existing code
+
+            # Retrieve focal track's intersection points for distance calculation
+            focal_track_intersections = calculate_track_intersections({layer: eta[track_idx] for layer, eta in track_eta.items()},
+                                                                    {layer: phi[track_idx] for layer, phi in track_phi.items()})
+            focal_points = [(x, y, z) for _, (x, y, z) in focal_track_intersections.items()]
+
+            # Iterate over all tracks in the event to find adjacent tracks
+            for adj_track_idx in range(event["nTrack"]):
+                if adj_track_idx == track_idx:  # Skip the focal track itself
+                    continue
+                
+                # Determine reference eta/phi for the adjacent track
+                adj_track_eta = event["trackEta_EMB2"][adj_track_idx] if event["trackEta_EMB2"][adj_track_idx] > -1000 else event["trackEta_EME2"][adj_track_idx]
+                adj_track_phi = event["trackPhi_EMB2"][adj_track_idx] if event["trackPhi_EMB2"][adj_track_idx] > -1000 else event["trackPhi_EME2"][adj_track_idx]
+
+                # Calculate delta R between focal and adjacent track
+                delta_r_adj = calculate_delta_r(focal_eta, focal_phi, adj_track_eta, adj_track_phi)
+
+                # Check if adjacent track is within MAX_DISTANCE
+                if delta_r_adj <= MAX_DISTANCE:
+                    # Add the adjacent track's information
+                    tracks_sample.begin_record()
+                    tracks_sample.field("trackIdx").integer(adj_track_idx)
+                    tracks_sample.field("trackPt").real(event["trackPt"][adj_track_idx])
+                    
+                    # Calculate and add adjacent track's intersection points along with minimum distance to focal track
+                    tracks_sample.field("track_layer_intersections")
+                    tracks_sample.begin_list()
+                    adj_track_intersections = calculate_track_intersections({layer: eta[adj_track_idx] for layer, eta in track_eta.items()},
+                                                                            {layer: phi[adj_track_idx] for layer, phi in track_phi.items()})
+                    
+                    for layer, (x, y, z) in adj_track_intersections.items():
+                        min_distance_to_focal = min(
+                            np.sqrt((fx - x) ** 2 + (fy - y) ** 2 + (fz - z) ** 2)
+                            for fx, fy, fz in focal_points
+                        )
+                        
+                        tracks_sample.begin_record()
+                        tracks_sample.field("layer").string(layer)
+                        tracks_sample.field("X").real(x)
+                        tracks_sample.field("Y").real(y)
+                        tracks_sample.field("Z").real(z)
+                        tracks_sample.field("distance_to_track").real(min_distance_to_focal)
+                        tracks_sample.end_record()
+                    tracks_sample.end_list()
+
+                    tracks_sample.end_record()
+
+            tracks_sample.end_list()
             '''
             ============================================================
             =======
@@ -352,6 +410,21 @@ for event in ak.to_list(tracks_sample_array):
                 for intpoint in value:
                     formatted_intpoint = {k: (f"{v:.4f}" if isinstance(v, float) else v) for k, v in intpoint.items()}
                     print(f"        {formatted_intpoint}")
+            elif field == "associated_tracks":
+                print(f"    {field}:")
+                for adj_track in value:
+                    for adj_field in adj_track:
+                        adj_value = adj_track[adj_field]
+                        if adj_field == "track_layer_intersections":
+                            print(f"            {adj_field}:")
+                            for layer_point in adj_value:
+                                formatted_layer_point = {k: (f"{v:.4f}" if isinstance(v, float) else v) for k, v in layer_point.items()}
+                                print(f"                {formatted_layer_point}")
+                        else:
+                            if isinstance(adj_value, float):
+                                print(f"            {adj_field}: {adj_value:.4f}")
+                            else:
+                                print(f"            {adj_field}: {adj_value}")
             else:
                 if isinstance(value, float):  # Check if the value is a float and format it
                     print(f"    {field}: {value:.4f}")
