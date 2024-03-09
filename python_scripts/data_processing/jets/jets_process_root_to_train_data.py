@@ -26,9 +26,14 @@ print("Events Keys:")
 for key in events.keys():
     print(key)
 
-print("\nGeometry Keys:")
-for key in cellgeo.keys():
-    print(key)
+#print("\nGeometry Keys:")
+#for key in cellgeo.keys():
+#    print(key)
+
+#print(events["trackTruthParticleIndex"].array()[0])
+#print(events["cluster_cell_hitsTruthIndex"].array()[0])
+#print(events["cluster_cell_hitsTruthE"].array()[0])
+#exit()
 
 '''
 Done:
