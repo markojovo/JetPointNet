@@ -3,16 +3,19 @@ import awkward as ak
 import numpy as np
 import vector
 import sys
-import matplotlib.pyplot as plt
 sys.path.append("/home/mjovanovic/Work/PointNet_Segmentation")
 from utils.track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
 HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
+
+from util_functs import *
 
 # Path to the ROOT file containing jet events
 FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
 GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
 
 NUM_EVENTS_TO_USE = 5
+
+UPROOT_MASK_VALUE_THRESHOLD = -100000
 
 # Maximum distance for cell and track identification
 MAX_DISTANCE = 0.2
@@ -68,54 +71,7 @@ After:
 - optimize for efficiency, file numbers and save space after 
 '''
 
-# Define the function to convert eta and phi to cartesian coordinates
-def eta_phi_to_cartesian(eta, phi, R=1):
-    theta = 2 * np.arctan(np.exp(-eta))
-    x = R * np.cos(phi)
-    y = R * np.sin(phi)
-    z = R / np.tan(theta)
-    return x, y, z
 
-# Define the function to calculate the intersection with a fixed R layer
-def intersection_fixed_r(eta, phi, fixed_r):
-    x, y, z = eta_phi_to_cartesian(eta, phi, R=fixed_r)
-    return x, y, z
-
-# Define the function to calculate the intersection with a fixed Z layer
-def intersection_fixed_z(eta, phi, fixed_z):
-    x, y, z_unit = eta_phi_to_cartesian(eta, phi)
-    scale_factor = fixed_z / z_unit
-    x *= scale_factor
-    y *= scale_factor
-    z = fixed_z
-    return x, y, z
-
-# Helper function to calculate delta R using eta and phi directly
-def calculate_delta_r(eta1, phi1, eta2, phi2):
-    dphi = np.mod(phi2 - phi1 + np.pi, 2 * np.pi) - np.pi
-    deta = eta2 - eta1
-    return np.sqrt(deta**2 + dphi**2)
-
-
-# Define the function to calculate the intersection points for each track
-def calculate_track_intersections(track_eta, track_phi):
-    intersections = {}
-    for layer in calo_layers:
-        eta = track_eta[layer]
-        phi = track_phi[layer]
-        # Skip calculation for invalid eta, phi values
-        if eta < -100000 or phi < -100000:
-            continue
-
-        # Calculate intersection based on layer type
-        if HAS_FIXED_R.get(layer, False):
-            x, y, z = intersection_fixed_r(eta, phi, FIXED_R[layer])
-        elif layer in FIXED_Z:
-            x, y, z = intersection_fixed_z(eta, phi, FIXED_Z[layer])
-        else:
-            raise Exception("Error: cell layers must either be fixed R or fixed Z, and not neither")
-        intersections[layer] = (x, y, z)
-    return intersections
 
 # Before the loop, initialize the awkward array structure for track samples
 tracks_sample = ak.ArrayBuilder()
@@ -215,12 +171,12 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
                     else:  # For trackID, fetch from the event dictionary
                         tracks_sample.integer(event[field_name][track_idx])
                 else:  # Handle real number fields
-                    if not event[field_name][track_idx] < -100000:
+                    if not event[field_name][track_idx] < UPROOT_MASK_VALUE_THRESHOLD:
                         tracks_sample.real(event[field_name][track_idx])
 
             track_eta_ref = event["trackEta_EMB2"][track_idx]  
             track_phi_ref = event["trackPhi_EMB2"][track_idx]  
-            if track_eta_ref < -100000:
+            if track_eta_ref < UPROOT_MASK_VALUE_THRESHOLD:
                 track_eta_ref = event["trackEta_EME2"][track_idx] 
                 track_phi_ref = event["trackPhi_EME2"][track_idx] 
             tracks_sample.field("trackEta")
@@ -349,8 +305,8 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
                     continue
                 
                 # Determine reference eta/phi for the adjacent track
-                adj_track_eta = event["trackEta_EMB2"][adj_track_idx] if event["trackEta_EMB2"][adj_track_idx] > -1000 else event["trackEta_EME2"][adj_track_idx]
-                adj_track_phi = event["trackPhi_EMB2"][adj_track_idx] if event["trackPhi_EMB2"][adj_track_idx] > -1000 else event["trackPhi_EME2"][adj_track_idx]
+                adj_track_eta = event["trackEta_EMB2"][adj_track_idx] if event["trackEta_EMB2"][adj_track_idx] > UPROOT_MASK_VALUE_THRESHOLD else event["trackEta_EME2"][adj_track_idx]
+                adj_track_phi = event["trackPhi_EMB2"][adj_track_idx] if event["trackPhi_EMB2"][adj_track_idx] > UPROOT_MASK_VALUE_THRESHOLD else event["trackPhi_EME2"][adj_track_idx]
 
                 # Calculate delta R between focal and adjacent track
                 delta_r_adj = calculate_delta_r(focal_eta, focal_phi, adj_track_eta, adj_track_phi)
@@ -396,38 +352,22 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
 
 # After processing, convert the ArrayBuilder to an actual Awkward array and print it
 tracks_sample_array = tracks_sample.snapshot()
+print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT=1)
 
-for event in ak.to_list(tracks_sample_array):
-    print("New event")
-    # Each event can contain multiple tracks
-    for track in event:
-        print("  Track")
-        # Now, print each field and its value for the track
-        for field in track:
-            value = track[field]
-            if field == "track_layer_intersections" or field == "associated_cells":
-                print(f"    {field}:")
-                for intpoint in value:
-                    formatted_intpoint = {k: (f"{v:.4f}" if isinstance(v, float) else v) for k, v in intpoint.items()}
-                    print(f"        {formatted_intpoint}")
-            elif field == "associated_tracks":
-                print(f"    {field}:")
-                for adj_track in value:
-                    for adj_field in adj_track:
-                        adj_value = adj_track[adj_field]
-                        if adj_field == "track_layer_intersections":
-                            print(f"            {adj_field}:")
-                            for layer_point in adj_value:
-                                formatted_layer_point = {k: (f"{v:.4f}" if isinstance(v, float) else v) for k, v in layer_point.items()}
-                                print(f"                {formatted_layer_point}")
-                        else:
-                            if isinstance(adj_value, float):
-                                print(f"            {adj_field}: {adj_value:.4f}")
-                            else:
-                                print(f"            {adj_field}: {adj_value}")
-            else:
-                if isinstance(value, float):  # Check if the value is a float and format it
-                    print(f"    {field}: {value:.4f}")
-                else:  # If not a float, print the value as is
-                    print(f"    {field}: {value}")
-        print()
+max_sample_length = calculate_max_sample_length(tracks_sample_array)
+print("Maximum sample size (original track + associated cells + associated track points): ",max_sample_length)
+
+print(tracks_sample_array.fields)
+print(tracks_sample_array["track_layer_intersections"].fields)
+print(tracks_sample_array["associated_cells"].fields)
+print(tracks_sample_array["associated_tracks"].fields)
+print(tracks_sample_array["associated_tracks"]["track_layer_intersections"].fields)
+
+
+
+feats = build_input_array(tracks_sample_array, max_sample_length)
+labs = build_labels_array(tracks_sample_array, max_sample_length)
+print(feats[0])
+print(labs[0])
+print(len(feats[0]))
+print(len(labs[0]))
