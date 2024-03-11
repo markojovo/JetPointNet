@@ -150,6 +150,7 @@ def build_input_array(tracks_sample_array, max_sample_length):
 def build_labels_array(tracks_sample_array, max_sample_length):
     # Initialize an empty list to hold all label arrays
     labels_list = []
+
     for event in tracks_sample_array:
         for track in event:
             # Check if the track has associated cells or tracks, skip if not
@@ -157,22 +158,27 @@ def build_labels_array(tracks_sample_array, max_sample_length):
                 continue
 
             # Initialize the label array for this track, filled with -1 (for padding)
-            label_array = np.full(max_sample_length, -1, dtype=np.int8)
+            label_array = np.full(max_sample_length, -1, dtype=np.float32)
 
-            # The actual number of points in this sample
-            num_points = len(track['track_layer_intersections']) + len(track['associated_cells'])
-            for associated_track in track['associated_tracks']:
-                num_points += len(associated_track['track_layer_intersections'])
+            # Calculate the total number of points (focused track points, associated cells, associated track points)
+            num_focused_track_points = len(track['track_layer_intersections'])
+            num_associated_cells = len(track['associated_cells'])
+            num_associated_track_points = sum(len(assoc_track['track_layer_intersections']) for assoc_track in track['associated_tracks'])
 
-            # Placeholder for setting actual labels
-            # TODO: Set actual labels for each point here, before applying the mask
+            # Set labels for focused track points to 1.0
+            label_array[:num_focused_track_points] = 1.0
 
-            # Apply "0" for actual points
-            label_array[:num_points] = 0  # Assuming 0 for actual points
+            # Set labels for associated cells to 0.5
+            label_array[num_focused_track_points:num_focused_track_points+num_associated_cells] = 0.5
+
+            # Set labels for associated track points to 0.0
+            start_idx = num_focused_track_points + num_associated_cells
+            end_idx = start_idx + num_associated_track_points
+            label_array[start_idx:end_idx] = 0.0
 
             # Add to labels list
             labels_list.append(label_array)
 
     # Convert the list of label arrays into a NumPy array
-    labels_array = np.array(labels_list, dtype=np.int8)
+    labels_array = np.array(labels_list, dtype=np.float32)
     return labels_array

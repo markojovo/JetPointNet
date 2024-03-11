@@ -18,7 +18,7 @@ NUM_EVENTS_TO_USE = 5
 UPROOT_MASK_VALUE_THRESHOLD = -100000
 
 # Maximum distance for cell and track identification
-MAX_DISTANCE = 0.2
+MAX_DISTANCE = 1.6
 
 # Open the ROOT file and access the EventTree
 events = uproot.open(FILE_LOC + ":EventTree")
@@ -367,7 +367,10 @@ print(tracks_sample_array["associated_tracks"]["track_layer_intersections"].fiel
 
 feats = build_input_array(tracks_sample_array, max_sample_length)
 labs = build_labels_array(tracks_sample_array, max_sample_length)
-print(feats[0])
-print(labs[0])
-print(len(feats[0]))
-print(len(labs[0]))
+
+index = 9
+
+print(feats[index])
+print(labs[index])
+print(len(feats[index]))
+print(len(labs[index]))
