@@ -8,4 +8,3 @@ containers/*
 # ignore pred files
 pi0*
 
-**/__pycache__/

@@ -13,7 +13,7 @@ from util_functs import *
 FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
 GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
 
-NUM_EVENTS_TO_USE = 5
+NUM_EVENTS_TO_USE = None
 
 UPROOT_MASK_VALUE_THRESHOLD = -100000
 
@@ -87,8 +87,11 @@ fields_list = track_layer_branches + jets_other_included_fields
 for data in events.iterate(fields_list, library="ak", step_size="500MB"):
     print(f"Processing a batch of {len(data)} events.")
     for event_idx, event in enumerate(data):
-        if event_idx >= NUM_EVENTS_TO_USE:  # Limiting processing for demonstration
-            break
+        print(f"Processing event: {event_idx + 1}")
+
+        if NUM_EVENTS_TO_USE is not None:
+            if event_idx >= NUM_EVENTS_TO_USE:  # Limiting processing for demonstration
+                break
 
         '''
         GRABBING ONLY CLUSTERED CELLS, SO WE CAN IGNORE ANY CELLS NOT IN ANY CLUSTER
@@ -141,6 +144,7 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
 
         # Initialize awkward array data structure for features
         for track_idx in range(event["nTrack"]):
+            print(f"\r    Processing Track: {track_idx + 1}", end='', flush=True)
             tracks_sample.begin_record()  # Each track is a record within the event list
 
 
@@ -275,6 +279,7 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
 
             tracks_sample.end_list()
 
+
             '''
             ============================================================
             =======
@@ -348,29 +353,36 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
             '''
             tracks_sample.end_record()  # End the record for the current track
 
+
         tracks_sample.end_list()  # End the list for the current event
+        print()
 
 # After processing, convert the ArrayBuilder to an actual Awkward array and print it
 tracks_sample_array = tracks_sample.snapshot()
+
+
 print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT=1)
-
-max_sample_length = calculate_max_sample_length(tracks_sample_array)
-print("Maximum sample size (original track + associated cells + associated track points): ",max_sample_length)
-
 print(tracks_sample_array.fields)
 print(tracks_sample_array["track_layer_intersections"].fields)
 print(tracks_sample_array["associated_cells"].fields)
 print(tracks_sample_array["associated_tracks"].fields)
 print(tracks_sample_array["associated_tracks"]["track_layer_intersections"].fields)
 
-
+max_sample_length = calculate_max_sample_length(tracks_sample_array)
 
 feats = build_input_array(tracks_sample_array, max_sample_length)
 labs = build_labels_array(tracks_sample_array, max_sample_length)
+save_data = (feats, labs)
 
 index = 9
 
 print(feats[index])
 print(labs[index])
-print(len(feats[index]))
-print(len(labs[index]))
+print(len(feats))
+print(len(labs))
+print("Maximum sample size (original track + associated cells + associated track points): ",max_sample_length)
+
+save_loc = '/data/mjovanovic/jets/mltree_JZ1_0_5000events_data/training_data.npz'
+print("Saving to: ", save_loc)
+
+np.savez(save_loc, features = feats, labels = labs)
