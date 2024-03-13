@@ -11,8 +11,8 @@ HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
 from util_functs import *
 
 # Path to the ROOT file containing jet events
-#FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
-FILE_LOC = "/data/atlas/mltree.root"
+FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
+#FILE_LOC = "/data/atlas/mltree.root"
 GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
 save_loc = '/data/mjovanovic/jets/mltree_JZ1_0_5000events_data/training_data.npz'
 
@@ -74,7 +74,11 @@ After:
 - optimize for efficiency, file numbers and save space after 
 '''
 
-
+# Load Cell Geometry Data
+cell_ID_geo = cellgeo["cell_geo_ID"].array(library="ak")
+eta_geo = cellgeo["cell_geo_eta"].array(library="ak")
+phi_geo = cellgeo["cell_geo_phi"].array(library="ak")
+rPerp_geo = cellgeo["cell_geo_rPerp"].array(library="ak")
 
 # Before the loop, initialize the awkward array structure for track samples
 tracks_sample = ak.ArrayBuilder()
@@ -124,6 +128,23 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
         unique_cell_Ys = cell_Ys[unique_indices] 
         unique_cell_Zs = cell_Zs[unique_indices] 
 
+
+        cell_ID_geo_np = ak.to_numpy(cell_ID_geo)
+        indices = []
+        for cell_id in ak.to_numpy(unique_cell_IDs):
+            mask = cell_ID_geo_np == cell_id
+            idx = np.nonzero(mask)[0]            
+            if len(idx) > 0:
+                indices.append(idx[0])  # Take the first match
+            else:
+                indices.append(-1)  # Use -1 or any placeholder to indicate no match
+                
+        indices_ak = ak.Array(indices)
+
+        non_matches = ak.all(cell_ID_geo[indices_ak] != unique_cell_IDs)
+        print(non_matches)
+
+
         # Recombine into a new Awkward Array if needed
         event_cells = ak.zip({
             'ID': unique_cell_IDs,
@@ -134,6 +155,9 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
             'Y': unique_cell_Ys,  
             'Z': unique_cell_Zs   
         })
+
+
+        exit()
         '''
         ============================================================
         =======
@@ -364,6 +388,7 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
 
 # After processing, convert the ArrayBuilder to an actual Awkward array and print it
 tracks_sample_array = tracks_sample.snapshot()
+
 
 
 #print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT=1)
