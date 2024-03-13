@@ -3,6 +3,7 @@ import awkward as ak
 import numpy as np
 import vector
 import sys
+import time
 sys.path.append("/home/mjovanovic/Work/PointNet_Segmentation")
 from utils.track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
 HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
@@ -10,8 +11,11 @@ HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
 from util_functs import *
 
 # Path to the ROOT file containing jet events
-FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
+#FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
+FILE_LOC = "/data/atlas/mltree.root"
 GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
+save_loc = '/data/mjovanovic/jets/mltree_JZ1_0_5000events_data/training_data.npz'
+
 
 NUM_EVENTS_TO_USE = None
 
@@ -27,7 +31,6 @@ cellgeo = uproot.open(GEO_FILE_LOC + ":CellGeo")
 print("Events Keys:")
 for key in events.keys():
     print(key)
-
 
 print("\nGeometry Keys:")
 for key in cellgeo.keys():
@@ -84,6 +87,8 @@ jets_other_included_fields = ["trackSubtractedCaloEnergy", "trackPt", "trackID",
 
 fields_list = track_layer_branches + jets_other_included_fields
 
+print("Starting Timer...")
+start_time = time.time()
 for data in events.iterate(fields_list, library="ak", step_size="500MB"):
     print(f"Processing a batch of {len(data)} events.")
     for event_idx, event in enumerate(data):
@@ -361,12 +366,12 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
 tracks_sample_array = tracks_sample.snapshot()
 
 
-print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT=1)
-print(tracks_sample_array.fields)
-print(tracks_sample_array["track_layer_intersections"].fields)
-print(tracks_sample_array["associated_cells"].fields)
-print(tracks_sample_array["associated_tracks"].fields)
-print(tracks_sample_array["associated_tracks"]["track_layer_intersections"].fields)
+#print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT=1)
+#print(tracks_sample_array.fields)
+#print(tracks_sample_array["track_layer_intersections"].fields)
+#print(tracks_sample_array["associated_cells"].fields)
+#print(tracks_sample_array["associated_tracks"].fields)
+#print(tracks_sample_array["associated_tracks"]["track_layer_intersections"].fields)
 
 max_sample_length = calculate_max_sample_length(tracks_sample_array)
 
@@ -382,7 +387,12 @@ print(len(feats))
 print(len(labs))
 print("Maximum sample size (original track + associated cells + associated track points): ",max_sample_length)
 
-save_loc = '/data/mjovanovic/jets/mltree_JZ1_0_5000events_data/training_data.npz'
+print("Stopping Timer...")
+finish_time = time.time()
 print("Saving to: ", save_loc)
 
 np.savez(save_loc, features = feats, labels = labs)
+
+duration = finish_time - start_time
+
+print(f"Total time to run for {event_idx + 1} events took {duration/60/60} hours")
