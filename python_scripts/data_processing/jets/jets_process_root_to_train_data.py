@@ -25,13 +25,11 @@ eta_geo = cellgeo["cell_geo_eta"].array(library="ak")[0]
 phi_geo = cellgeo["cell_geo_phi"].array(library="ak")[0]
 rPerp_geo = cellgeo["cell_geo_rPerp"].array(library="ak")[0]
 
-# Before the loop, initialize the awkward array structure for track samples
-tracks_sample = ak.ArrayBuilder()
-
-
-
 print("Starting Timer...")
 start_time = time.time()
+
+# Before the loop, initialize the awkward array structure for track samples
+tracks_sample = ak.ArrayBuilder()
 for data in events.iterate(fields_list, library="ak", step_size="500MB"):
     print(f"Processing a batch of {len(data)} events.")
     for event_idx, event in enumerate(data):
@@ -41,11 +39,7 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
             if event_idx >= NUM_EVENTS_TO_USE:  # Limiting processing for demonstration
                 break
 
-        '''
-        GRABBING ONLY CLUSTERED CELLS, SO WE CAN IGNORE ANY CELLS NOT IN ANY CLUSTER
-        (THEN UNFLATTENING SO WE HAVE A MASTER LIST OF FILTERED CELLS FOR THIS EVENT)
-        ============================================================
-        '''
+
         event_cells, track_etas, track_phis = process_and_filter_cells(event, cellgeo)
         
 
@@ -53,7 +47,6 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
         for track_idx in range(event["nTrack"]):
             print(f"\r    Processing Track: {track_idx + 1}", end='', flush=True)
             tracks_sample.begin_record()  # Each track is a record within the event list
-
 
             '''
             GET TRACK META INFO
@@ -77,6 +70,7 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
             =======
             '''
 
+
             '''
             CALCULATING TRACK X, Y, Z PATH POINTS (INTERSECTIONS WITH CELL LAYERS)
             ============================================================
@@ -87,6 +81,7 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
             =======
             '''
 
+
             '''
             GET ASSOCIATED CELL INFO (Those within deltaR of track)
             ============================================================
@@ -96,6 +91,7 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
             ============================================================
             =======
             '''
+
 
             '''
             GET ASSOCIATED TRACKS (Those within deltaR of the track's eta/phi)
