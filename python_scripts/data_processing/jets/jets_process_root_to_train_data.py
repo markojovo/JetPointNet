@@ -128,23 +128,6 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
         unique_cell_Ys = cell_Ys[unique_indices] 
         unique_cell_Zs = cell_Zs[unique_indices] 
 
-
-        cell_ID_geo_np = ak.to_numpy(cell_ID_geo)
-        indices = []
-        for cell_id in ak.to_numpy(unique_cell_IDs):
-            mask = cell_ID_geo_np == cell_id
-            idx = np.nonzero(mask)[0]            
-            if len(idx) > 0:
-                indices.append(idx[0])  # Take the first match
-            else:
-                indices.append(-1)  # Use -1 or any placeholder to indicate no match
-                
-        indices_ak = ak.Array(indices)
-
-        non_matches = ak.all(cell_ID_geo[indices_ak] != unique_cell_IDs)
-        print(non_matches)
-
-
         # Recombine into a new Awkward Array if needed
         event_cells = ak.zip({
             'ID': unique_cell_IDs,
