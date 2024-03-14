@@ -75,10 +75,10 @@ After:
 '''
 
 # Load Cell Geometry Data
-cell_ID_geo = cellgeo["cell_geo_ID"].array(library="ak")
-eta_geo = cellgeo["cell_geo_eta"].array(library="ak")
-phi_geo = cellgeo["cell_geo_phi"].array(library="ak")
-rPerp_geo = cellgeo["cell_geo_rPerp"].array(library="ak")
+cell_ID_geo = cellgeo["cell_geo_ID"].array(library="ak")[0]
+eta_geo = cellgeo["cell_geo_eta"].array(library="ak")[0]
+phi_geo = cellgeo["cell_geo_phi"].array(library="ak")[0]
+rPerp_geo = cellgeo["cell_geo_rPerp"].array(library="ak")[0]
 
 # Before the loop, initialize the awkward array structure for track samples
 tracks_sample = ak.ArrayBuilder()
@@ -108,25 +108,55 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
         ============================================================
         '''
         # Assuming `events` is your dataset, and it has cluster_cell_ID, cluster_cell_E, cluster_cell_eta, cluster_cell_phi
-        cell_IDs = ak.flatten(event['cluster_cell_ID'])
-        cell_Es = ak.flatten(event['cluster_cell_E'])
-        cell_etas = ak.flatten(event['cluster_cell_Eta'])
-        cell_phis = ak.flatten(event['cluster_cell_Phi'])
-        cell_Xs = ak.flatten(event['cluster_cell_X'])  
-        cell_Ys = ak.flatten(event['cluster_cell_Y'])  
-        cell_Zs = ak.flatten(event['cluster_cell_Z'])  
+        cell_IDs_with_multiples = ak.flatten(event['cluster_cell_ID'])
+        cell_Es_with_multiples = ak.flatten(event['cluster_cell_E'])
+
+        
+
+        #cell_ID_geo
+        #eta_geo
+        #phi_geo
+        #rPerp_geo
 
         # To get the first occurrence indices of each unique ID
-        _, unique_indices = np.unique(ak.to_numpy(cell_IDs), return_index=True)
+        _, unique_indices = np.unique(ak.to_numpy(cell_IDs_with_multiples), return_index=True)
+
+
+
+        test_Xs = ak.flatten(event['cluster_cell_X'])[unique_indices]
 
         # Now use these indices to select the corresponding E, eta, and phi values
-        unique_cell_IDs = cell_IDs[unique_indices]
-        unique_cell_Es = cell_Es[unique_indices]
-        unique_cell_etas = cell_etas[unique_indices]
-        unique_cell_phis = cell_phis[unique_indices]
-        unique_cell_Xs = cell_Xs[unique_indices]
-        unique_cell_Ys = cell_Ys[unique_indices] 
-        unique_cell_Zs = cell_Zs[unique_indices] 
+        cell_IDs = cell_IDs_with_multiples[unique_indices]
+        cell_Es = cell_Es_with_multiples[unique_indices]
+
+        cell_IDs_array = np.array(cell_IDs)  # If cell_IDs is already a numpy array, this step can be skipped
+        cell_ID_geo_array = np.array(cell_ID_geo)  # Same as above, skip if already a numpy array
+
+        # Find which elements of cell_ID_geo are in cell_IDs
+        mask = np.isin(cell_ID_geo_array, cell_IDs_array)
+
+        # Find the indices of these elements
+        indices_of_geo_that_contain_event_cells = np.where(mask)[0]
+
+
+
+        print(cell_IDs)
+        print(cell_ID_geo[indices_of_geo_that_contain_event_cells])
+
+        print(len(cell_IDs))
+        print(len(cell_ID_geo[indices_of_geo_that_contain_event_cells]))
+
+        cell_Etas = eta_geo[indices_of_geo_that_contain_event_cells]
+        cell_Phis = phi_geo[indices_of_geo_that_contain_event_cells]
+        cell_rPerps = rPerp_geo[indices_of_geo_that_contain_event_cells]
+
+
+        cell_Xs, cell_Ys, cell_Zs = calculate_cartesian_coordinates(cell_Etas, cell_Phis, cell_rPerps)
+        print(cell_Xs)
+        print(test_Xs)
+        
+
+        exit()
 
         # Recombine into a new Awkward Array if needed
         event_cells = ak.zip({
@@ -140,7 +170,6 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
         })
 
 
-        exit()
         '''
         ============================================================
         =======
