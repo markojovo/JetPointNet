@@ -19,6 +19,15 @@ for key in cellgeo.keys():
     print(key)
 
 
+# Process events and tracks as before, with the following adjustments:
+track_layer_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers] # Getting all the cell layer points that the track hits (ie trackEta_EME2, trackPhi_EMB3, etc)
+
+jets_other_included_fields = ["trackSubtractedCaloEnergy", "trackPt", "nTrack", "cluster_cell_ID",
+                          "trackNumberDOF","trackChiSquared","cluster_cell_E","cluster_fullHitsTruthIndex","cluster_fullHitsTruthE"]
+
+fields_list = track_layer_branches + jets_other_included_fields
+
+
 # Load Cell Geometry Data
 cell_ID_geo = cellgeo["cell_geo_ID"].array(library="ak")[0]
 eta_geo = cellgeo["cell_geo_eta"].array(library="ak")[0]
