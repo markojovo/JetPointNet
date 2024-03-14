@@ -11,18 +11,18 @@ HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
 from util_functs import *
 
 # Path to the ROOT file containing jet events
-FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
-#FILE_LOC = "/data/atlas/mltree.root"
+#FILE_LOC = "/fast_scratch_1/atlas_images/jets/mltree_JZ1_0_5000events.root"
+FILE_LOC = "/data/atlas/mltree.root"
 GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
 save_loc = '/data/mjovanovic/jets/mltree_JZ1_0_5000events_data/training_data.npz'
 
 
-NUM_EVENTS_TO_USE = None
+NUM_EVENTS_TO_USE = 2
 
 UPROOT_MASK_VALUE_THRESHOLD = -100000
 
 # Maximum distance for cell and track identification
-MAX_DISTANCE = 1.6
+MAX_DISTANCE = 0.2
 
 # Open the ROOT file and access the EventTree
 events = uproot.open(FILE_LOC + ":EventTree")
@@ -86,8 +86,8 @@ tracks_sample = ak.ArrayBuilder()
 # Process events and tracks as before, with the following adjustments:
 track_layer_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers] # Getting all the cell layer points that the track hits (ie trackEta_EME2, trackPhi_EMB3, etc)
 
-jets_other_included_fields = ["trackSubtractedCaloEnergy", "trackPt", "trackID", "nTrack", "cluster_cell_ID", "cluster_cell_Eta", "cluster_cell_Phi",
-                          "trackNumberDOF","trackChiSquared","cluster_cell_E", "cluster_cell_X","cluster_cell_Y","cluster_cell_Z","cluster_fullHitsTruthIndex","cluster_fullHitsTruthE"]
+jets_other_included_fields = ["trackSubtractedCaloEnergy", "trackPt", "nTrack", "cluster_cell_ID",
+                          "trackNumberDOF","trackChiSquared","cluster_cell_E","cluster_fullHitsTruthIndex","cluster_fullHitsTruthE"]
 
 fields_list = track_layer_branches + jets_other_included_fields
 
@@ -111,19 +111,9 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
         cell_IDs_with_multiples = ak.flatten(event['cluster_cell_ID'])
         cell_Es_with_multiples = ak.flatten(event['cluster_cell_E'])
 
-        
-
-        #cell_ID_geo
-        #eta_geo
-        #phi_geo
-        #rPerp_geo
 
         # To get the first occurrence indices of each unique ID
         _, unique_indices = np.unique(ak.to_numpy(cell_IDs_with_multiples), return_index=True)
-
-
-
-        test_Xs = ak.flatten(event['cluster_cell_X'])[unique_indices]
 
         # Now use these indices to select the corresponding E, eta, and phi values
         cell_IDs = cell_IDs_with_multiples[unique_indices]
@@ -139,34 +129,23 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
         indices_of_geo_that_contain_event_cells = np.where(mask)[0]
 
 
-
-        print(cell_IDs)
-        print(cell_ID_geo[indices_of_geo_that_contain_event_cells])
-
-        print(len(cell_IDs))
-        print(len(cell_ID_geo[indices_of_geo_that_contain_event_cells]))
-
         cell_Etas = eta_geo[indices_of_geo_that_contain_event_cells]
         cell_Phis = phi_geo[indices_of_geo_that_contain_event_cells]
         cell_rPerps = rPerp_geo[indices_of_geo_that_contain_event_cells]
 
 
         cell_Xs, cell_Ys, cell_Zs = calculate_cartesian_coordinates(cell_Etas, cell_Phis, cell_rPerps)
-        print(cell_Xs)
-        print(test_Xs)
-        
-
-        exit()
+  
 
         # Recombine into a new Awkward Array if needed
         event_cells = ak.zip({
-            'ID': unique_cell_IDs,
-            'E': unique_cell_Es,
-            'eta': unique_cell_etas,
-            'phi': unique_cell_phis,
-            'X': unique_cell_Xs,  
-            'Y': unique_cell_Ys,  
-            'Z': unique_cell_Zs   
+            'ID': cell_IDs,
+            'E': cell_Es,
+            'eta': cell_Etas,
+            'phi': cell_Phis,
+            'X': cell_Xs,  
+            'Y': cell_Ys,  
+            'Z': cell_Zs   
         })
 
 
@@ -187,7 +166,7 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
         for track_idx in range(event["nTrack"]):
             print(f"\r    Processing Track: {track_idx + 1}", end='', flush=True)
             tracks_sample.begin_record()  # Each track is a record within the event list
-
+            tracks_sample.field("trackID").integer(track_idx)
 
             '''
             GET TRACK META INFO
@@ -196,7 +175,6 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
             # List of field names and their types
             fields = [
                 ("eventID", "integer"),
-                ("trackID", "integer"),
                 ("trackEta_EMB2", "real"),
                 ("trackPhi_EMB2", "real"),
                 ("trackEta_EME2", "real"),
@@ -210,7 +188,7 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
             # Looped version instead of doing this (a 2-line example): tracks_sample.field("trackEta_EMB2") \ tracks_sample.real(event["trackEta_EMB2"][track_idx])  
             for field_name, field_type in fields:
                 tracks_sample.field(field_name)
-                if field_name in ["eventID", "trackID"]:  # Handle integer fields
+                if field_name in ["eventID"]:  # Handle integer fields
                     if field_name == "eventID":
                         tracks_sample.integer(event_idx)  # Assuming event_idx is the ID
                     else:  # For trackID, fetch from the event dictionary
@@ -401,7 +379,7 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
 # After processing, convert the ArrayBuilder to an actual Awkward array and print it
 tracks_sample_array = tracks_sample.snapshot()
 
-
+print_events(tracks_sample_array, 1)
 
 #print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT=1)
 #print(tracks_sample_array.fields)
@@ -426,6 +404,8 @@ print("Maximum sample size (original track + associated cells + associated track
 
 print("Stopping Timer...")
 finish_time = time.time()
+
+exit()
 print("Saving to: ", save_loc)
 
 np.savez(save_loc, features = feats, labels = labs)
