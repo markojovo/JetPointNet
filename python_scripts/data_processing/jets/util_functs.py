@@ -4,6 +4,10 @@ import sys
 sys.path.append("/home/mjovanovic/Work/PointNet_Segmentation")
 from utils.track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
 HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
+from both import *
+
+# =======================================================================================================================
+# ============ UTILITY FUNCTIONS ================================================================================
 
 def calculate_cartesian_coordinates(eta, phi, rPerp):
     X = rPerp * np.cos(phi)
@@ -11,7 +15,6 @@ def calculate_cartesian_coordinates(eta, phi, rPerp):
     Z = rPerp * np.sinh(eta)
 
     return X, Y, Z
-
 
 # Define the function to convert eta and phi to cartesian coordinates
 def eta_phi_to_cartesian(eta, phi, R=1):
@@ -41,6 +44,7 @@ def calculate_delta_r(eta1, phi1, eta2, phi2):
     deta = eta2 - eta1
     return np.sqrt(deta**2 + dphi**2)
 
+# =======================================================================================================================
 
 # Define the function to calculate the intersection points for each track
 def calculate_track_intersections(track_eta, track_phi):
@@ -62,6 +66,8 @@ def calculate_track_intersections(track_eta, track_phi):
         intersections[layer] = (x, y, z)
     return intersections
 
+# =======================================================================================================================
+
 def calculate_max_sample_length(tracks_array):
     max_length = 0
     for event in tracks_array:
@@ -72,6 +78,8 @@ def calculate_max_sample_length(tracks_array):
             if length > max_length:
                 max_length = length
     return max_length
+
+# =======================================================================================================================
 
 def print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT):
     # Weirdly structured. Is overcomplicated code-wise for more readable output
@@ -112,6 +120,7 @@ def print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT):
                         print(f"    {field}: {value}")
             print()
 
+# =======================================================================================================================
 
 def build_input_array(tracks_sample_array, max_sample_length):
     # Initialize an empty list to hold all samples
@@ -153,6 +162,7 @@ def build_input_array(tracks_sample_array, max_sample_length):
     samples_array = np.array(samples, dtype=np.float32)
     return samples_array
 
+# =======================================================================================================================
 
 def build_labels_array(tracks_sample_array, max_sample_length):
     # Initialize an empty list to hold all label arrays
@@ -189,3 +199,309 @@ def build_labels_array(tracks_sample_array, max_sample_length):
     # Convert the list of label arrays into a NumPy array
     labels_array = np.array(labels_list, dtype=np.float32)
     return labels_array
+
+# =======================================================================================================================
+# =======================================================================================================================
+
+
+
+
+
+
+
+
+# =======================================================================================================================
+# ============ PROCESSING CODE FUNCTIONS ================================================================================
+
+def process_and_filter_cells(event, cellgeo):
+
+    """
+    GRABBING ONLY CLUSTERED CELLS, SO WE CAN IGNORE ANY CELLS NOT IN ANY CLUSTER
+        (THEN UNFLATTENING SO WE HAVE A MASTER LIST OF FILTERED CELLS FOR THIS EVENT)
+        ============================================================
+    Process and filter cell data for an event, returning structured data for further analysis.
+
+    Parameters:
+    - event: The event data containing cell and track information.
+    - cellgeo: Geometric information about the cells.
+
+    Returns:
+    - event_cells: A structured array of filtered cells with added Cartesian coordinates.
+    - track_etas: A dictionary of eta values for each track, organized by layer.
+    - track_phis: A dictionary of phi values for each track, organized by layer.
+    """
+
+    # Extracting cell IDs and energies, assuming they are part of clusters
+    cell_IDs_with_multiples = ak.flatten(event['cluster_cell_ID'])
+    cell_Es_with_multiples = ak.flatten(event['cluster_cell_E'])
+
+    # Finding unique cell IDs and their first occurrence indices
+    _, unique_indices = np.unique(ak.to_numpy(cell_IDs_with_multiples), return_index=True)
+
+    # Selecting corresponding unique cell data
+    cell_IDs = cell_IDs_with_multiples[unique_indices]
+    cell_Es = cell_Es_with_multiples[unique_indices]
+
+    # Matching cells with their geometric data
+    cell_ID_geo_array = np.array(cellgeo["cell_geo_ID"].array(library="ak")[0])
+    mask = np.isin(cell_ID_geo_array, np.array(cell_IDs))
+    indices = np.where(mask)[0]
+
+    # Extracting and mapping geometric data to the filtered cells
+    cell_Etas = cellgeo["cell_geo_eta"].array(library="ak")[0][indices]
+    cell_Phis = cellgeo["cell_geo_phi"].array(library="ak")[0][indices]
+    cell_rPerps = cellgeo["cell_geo_rPerp"].array(library="ak")[0][indices]
+
+    # Calculating Cartesian coordinates for the cells
+    cell_Xs, cell_Ys, cell_Zs = calculate_cartesian_coordinates(cell_Etas, cell_Phis, cell_rPerps)
+
+    # Creating a structured array for the event's cells
+    event_cells = ak.zip({
+        'ID': cell_IDs,
+        'E': cell_Es,
+        'eta': cell_Etas,
+        'phi': cell_Phis,
+        'X': cell_Xs,
+        'Y': cell_Ys,
+        'Z': cell_Zs
+    })
+
+    # Preparing track eta and phi data for all layers
+    track_etas = {layer: event[f'trackEta_{layer}'] for layer in calo_layers}
+    track_phis = {layer: event[f'trackPhi_{layer}'] for layer in calo_layers}
+
+    return event_cells, track_etas, track_phis
+
+# =======================================================================================================================
+
+def add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields):
+    """
+    Adds track metadata information to the tracks_sample ArrayBuilder.
+
+    Parameters:
+    - tracks_sample: The Awkward ArrayBuilder to which the track metadata will be added.
+    - event: The current event data containing track and other information.
+    - track_idx: Index of the current track being processed.
+    - fields: A list of tuples containing the field names and their types to be added.
+    """
+    # Start adding trackID, trackEta, and trackPhi as done previously
+    tracks_sample.field("trackID").integer(track_idx)
+    track_eta_ref = event["trackEta_EMB2"][track_idx] if event["trackEta_EMB2"][track_idx] > UPROOT_MASK_VALUE_THRESHOLD else event["trackEta_EME2"][track_idx]
+    track_phi_ref = event["trackPhi_EMB2"][track_idx] if event["trackPhi_EMB2"][track_idx] > UPROOT_MASK_VALUE_THRESHOLD else event["trackPhi_EME2"][track_idx]
+    tracks_sample.field("trackEta").real(track_eta_ref)
+    tracks_sample.field("trackPhi").real(track_phi_ref)
+
+    # Process additional fields based on the provided list
+    for field_name, field_type in fields:
+        tracks_sample.field(field_name)
+        if field_type == "integer":
+            # For integer fields
+            if field_name == "eventID":
+                tracks_sample.integer(event_idx)  # Assuming event_idx is the ID
+            else:
+                tracks_sample.integer(event[field_name][track_idx])
+        elif field_type == "real":
+            # For real number fields
+            if not event[field_name][track_idx] < UPROOT_MASK_VALUE_THRESHOLD:
+                tracks_sample.real(event[field_name][track_idx])
+
+    return track_eta_ref, track_phi_ref
+
+# =======================================================================================================================
+
+def add_track_intersection_info(tracks_sample, track_idx, track_eta, track_phi, calculate_track_intersections):
+    """
+    Adds track X, Y, Z path points (intersections with cell layers) to the tracks_sample ArrayBuilder.
+
+    Parameters:
+    - tracks_sample: The Awkward ArrayBuilder to which the intersection points will be added.
+    - track_idx: Index of the current track being processed.
+    - track_eta: Dictionary of track eta values for each layer.
+    - track_phi: Dictionary of track phi values for each layer.
+    - calculate_track_intersections: Function to calculate the intersections of the track with cell layers.
+    """
+    # Calculate intersections for the track
+    track_intersections = calculate_track_intersections({layer: eta[track_idx] for layer, eta in track_eta.items()},
+                                                        {layer: phi[track_idx] for layer, phi in track_phi.items()})
+    
+    # Add track intersection information
+    tracks_sample.field("track_layer_intersections")
+    tracks_sample.begin_list()  # Start list of intersection points for this track
+    for layer, (x, y, z) in track_intersections.items():
+        tracks_sample.begin_record()  # Each intersection point is a record
+        tracks_sample.field("layer")
+        tracks_sample.string(layer)
+        tracks_sample.field("X")
+        tracks_sample.real(x)
+        tracks_sample.field("Y")
+        tracks_sample.real(y)
+        tracks_sample.field("Z")
+        tracks_sample.real(z)
+        tracks_sample.end_record()  # End the record for this intersection point
+    tracks_sample.end_list()  # End list of intersection points
+
+# =======================================================================================================================
+
+def add_track_intersection_info(tracks_sample, track_idx, track_eta, track_phi):
+    """
+    Adds track X, Y, Z path points (intersections with cell layers) to the tracks_sample ArrayBuilder.
+
+    Parameters:
+    - tracks_sample: The Awkward ArrayBuilder to which the intersection points will be added.
+    - track_idx: Index of the current track being processed.
+    - track_eta: Dictionary of track eta values for each layer.
+    - track_phi: Dictionary of track phi values for each layer.
+    - calculate_track_intersections: Function to calculate the intersections of the track with cell layers.
+    """
+    # Calculate intersections for the track
+    track_intersections = calculate_track_intersections({layer: eta[track_idx] for layer, eta in track_eta.items()},
+                                                        {layer: phi[track_idx] for layer, phi in track_phi.items()})
+    
+    # Add track intersection information
+    tracks_sample.field("track_layer_intersections")
+    tracks_sample.begin_list()  # Start list of intersection points for this track
+    for layer, (x, y, z) in track_intersections.items():
+        tracks_sample.begin_record()  # Each intersection point is a record
+        tracks_sample.field("layer")
+        tracks_sample.string(layer)
+        tracks_sample.field("X")
+        tracks_sample.real(x)
+        tracks_sample.field("Y")
+        tracks_sample.real(y)
+        tracks_sample.field("Z")
+        tracks_sample.real(z)
+        tracks_sample.end_record()  # End the record for this intersection point
+    tracks_sample.end_list()  # End list of intersection points
+
+    return track_intersections
+
+# =======================================================================================================================
+
+def process_associated_cell_info(event_cells, tracks_sample, track_eta_ref, track_phi_ref, track_intersections):
+    """
+    Process cells associated with a track based on ΔR and other criteria.
+
+    Parameters:
+    - event_cells: The cells in the current event.
+    - tracks_sample: Awkward ArrayBuilder for building the event structure.
+    - track_eta_ref: Reference eta for the track.
+    - track_phi_ref: Reference phi for the track.
+    - track_intersections: Intersection points of the track with cell layers.
+    - MAX_DISTANCE: Maximum ΔR distance for a cell to be considered associated with the track.
+    """
+
+    # Use cell eta and phi directly from the `cells` structured array
+    cell_eta = event_cells['eta']
+    cell_phi = event_cells['phi']
+
+    # Vectorized calculation of delta R for all cells with respect to the track
+    delta_r = calculate_delta_r(track_eta_ref, track_phi_ref, cell_eta, cell_phi)
+
+    # Creating a mask for cells within the delta R threshold
+    mask = delta_r <= MAX_DISTANCE
+
+    # Apply the mask to filter cells directly using Awkward Array's boolean masking
+    filtered_cells = event_cells[mask]
+    tracks_sample.field("total_associated_cell_energy").real(sum(filtered_cells["E"]))
+
+    # Preparing to add the filtered cells to the track sample
+    tracks_sample.field("associated_cells")
+    tracks_sample.begin_list()
+
+    track_intersection_points = [(x, y, z) for layer, (x, y, z) in track_intersections.items()]
+    
+    # Iterate over filtered cells
+    for cell in filtered_cells:
+        tracks_sample.begin_record()
+        tracks_sample.field("ID").integer(cell["ID"])
+        tracks_sample.field("E").real(cell["E"])
+        tracks_sample.field("X").real(cell["X"])
+        tracks_sample.field("Y").real(cell["Y"])
+        tracks_sample.field("Z").real(cell["Z"])
+        
+        # Calculate distances to each track intersection point and find the minimum
+        cell_x, cell_y, cell_z = cell["X"], cell["Y"], cell["Z"]
+        min_distance = min(
+            np.sqrt((x - cell_x) ** 2 + (y - cell_y) ** 2 + (z - cell_z) ** 2)
+            for x, y, z in track_intersection_points
+        )
+        tracks_sample.field("distance_to_track").real(min_distance)
+        tracks_sample.field("eta").real(cell["eta"])
+        tracks_sample.field("phi").real(cell["phi"])
+
+        tracks_sample.end_record()
+
+    tracks_sample.end_list()
+
+# =======================================================================================================================
+
+def process_associated_tracks(event, tracks_sample, track_eta_ref, track_phi_ref, track_idx, nTrack, track_etas, track_phis):
+    """
+    Process tracks associated with a focal track based on ΔR and other criteria.
+
+    Parameters:
+    - event: The current event data including track information.
+    - tracks_sample: Awkward ArrayBuilder for building the event structure.
+    - track_eta_ref: Reference eta for the focal track.
+    - track_phi_ref: Reference phi for the focal track.
+    - track_idx: Index of the focal track within the event.
+    - nTrack: Total number of tracks in the event.
+    - MAX_DISTANCE: Maximum ΔR distance for a track to be considered associated with the focal track.
+    - calculate_delta_r: Function to calculate the delta R between two points.
+    - calculate_track_intersections: Function to calculate track intersections with cell layers.
+    - UPROOT_MASK_VALUE_THRESHOLD: Threshold value to determine valid track points.
+    """
+
+    # Initialize the field for adjacent tracks
+    tracks_sample.field("associated_tracks")
+    tracks_sample.begin_list()
+
+    # Retrieve focal track's intersection points for distance calculation
+    focal_track_intersections = calculate_track_intersections({layer: eta[track_idx] for layer, eta in track_etas.items()},
+                                                               {layer: phi[track_idx] for layer, phi in track_phis.items()})
+    focal_points = [(x, y, z) for _, (x, y, z) in focal_track_intersections.items()]
+
+    # Iterate over all tracks in the event to find adjacent tracks
+    for adj_track_idx in range(nTrack):
+        if adj_track_idx == track_idx:  # Skip the focal track itself
+            continue
+
+        # Determine reference eta/phi for the adjacent track
+        adj_track_eta = event["trackEta_EMB2"][adj_track_idx] if event["trackEta_EMB2"][adj_track_idx] > UPROOT_MASK_VALUE_THRESHOLD else event["trackEta_EME2"][adj_track_idx]
+        adj_track_phi = event["trackPhi_EMB2"][adj_track_idx] if event["trackPhi_EMB2"][adj_track_idx] > UPROOT_MASK_VALUE_THRESHOLD else event["trackPhi_EME2"][adj_track_idx]
+
+        # Calculate delta R between focal and adjacent track
+        delta_r_adj = calculate_delta_r(track_eta_ref, track_phi_ref, adj_track_eta, adj_track_phi)
+
+        # Check if adjacent track is within MAX_DISTANCE
+        if delta_r_adj <= MAX_DISTANCE:
+            tracks_sample.begin_record()
+            tracks_sample.field("trackIdx").integer(adj_track_idx)
+            tracks_sample.field("trackPt").real(event["trackPt"][adj_track_idx])
+
+            tracks_sample.field("track_layer_intersections")
+            tracks_sample.begin_list()
+            adj_track_intersections = calculate_track_intersections({layer: eta[adj_track_idx] for layer, eta in track_etas.items()},
+                                                                    {layer: phi[adj_track_idx] for layer, phi in track_phis.items()})
+
+            for layer, (x, y, z) in adj_track_intersections.items():
+                min_distance_to_focal = min(
+                    np.sqrt((fx - x) ** 2 + (fy - y) ** 2 + (fz - z) ** 2)
+                    for fx, fy, fz in focal_points
+                )
+
+                tracks_sample.begin_record()
+                tracks_sample.field("layer").string(layer)
+                tracks_sample.field("X").real(x)
+                tracks_sample.field("Y").real(y)
+                tracks_sample.field("Z").real(z)
+                tracks_sample.field("distance_to_track").real(min_distance_to_focal)
+                tracks_sample.end_record()
+
+            tracks_sample.end_list()
+            tracks_sample.end_record()
+
+    tracks_sample.end_list()
+    
+# =======================================================================================================================
+# =======================================================================================================================
