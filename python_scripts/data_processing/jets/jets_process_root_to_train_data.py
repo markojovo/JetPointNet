@@ -112,26 +112,6 @@ for data in events.iterate(fields_list, library="ak", step_size="100MB"):
             
 
 
-            '''
-            GET CELL, TRACK AND ASSOCIATED TRACK LABELS
-            ============================================================
-            '''
-            #skip those with -1 anafter
-
-            #print()
-            
-            #print("trackTruthParticleIndex", event["trackTruthParticleIndex"])
-            #print("cluster hit truth index", ak.flatten((event["cluster_cell_hitsTruthIndex"])))
-            #print("cluster hit truth E", event["cluster_cell_hitsTruthE"])
-            #exit()
-            
-            
-            '''
-            ============================================================
-            =======
-            '''
-
-
             ''
             tracks_sample.end_record()  # End the record for the current track
             
