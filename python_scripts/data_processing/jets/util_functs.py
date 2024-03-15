@@ -236,8 +236,21 @@ def process_and_filter_cells(event, cellgeo):
     # Extracting cell IDs and energies, assuming they are part of clusters
     cell_IDs_with_multiples = ak.flatten(event['cluster_cell_ID'])
     cell_Es_with_multiples = ak.flatten(event['cluster_cell_E'])
-    cell_part_truth_Idxs_with_multiples = ak.flatten(event['cluster_cell_hitsTruthIndex'])
-    cell_part_truth_Es_with_multiples = ak.flatten(event['cluster_cell_hitsTruthE'])
+    
+    mask_hitsTruthIndex = ak.num(event['cluster_cell_hitsTruthIndex'], axis=2) > 0
+    mask_hitsTruthE = ak.num(event['cluster_cell_hitsTruthE'], axis=2) > 0
+
+    cell_part_truth_Idxs_with_multiples = ak.flatten(event['cluster_cell_hitsTruthIndex'][mask_hitsTruthIndex])
+    cell_part_truth_Es_with_multiples = ak.flatten(event['cluster_cell_hitsTruthE'][mask_hitsTruthE])
+
+    
+    print(event['cluster_cell_E'])
+    print(len(cell_Es_with_multiples))
+    print(len(cell_IDs_with_multiples))
+    print(len(cell_part_truth_Idxs_with_multiples))
+    print(len(cell_part_truth_Es_with_multiples))
+    print()
+    
 
     # Finding unique cell IDs and their first occurrence indices
     _, unique_indices = np.unique(ak.to_numpy(cell_IDs_with_multiples), return_index=True)
@@ -245,8 +258,10 @@ def process_and_filter_cells(event, cellgeo):
     # Selecting corresponding unique cell data
     cell_IDs = cell_IDs_with_multiples[unique_indices]
     cell_Es = cell_Es_with_multiples[unique_indices]
-    cell_part_truth_Idxs = cell_part_truth_Idxs_with_multiples[unique_indices]
-    cell_part_truth_Es = cell_part_truth_Es_with_multiples[unique_indices]
+
+    #cell_part_truth_Idxs = cell_part_truth_Idxs_with_multiples[unique_indices]
+    #cell_part_truth_Es = cell_part_truth_Es_with_multiples[unique_indices]
+    
 
     # Matching cells with their geometric data
     cell_ID_geo_array = np.array(cellgeo["cell_geo_ID"].array(library="ak")[0])
@@ -260,6 +275,7 @@ def process_and_filter_cells(event, cellgeo):
 
     # Calculating Cartesian coordinates for the cells
     cell_Xs, cell_Ys, cell_Zs = calculate_cartesian_coordinates(cell_Etas, cell_Phis, cell_rPerps)
+
 
 
     # Creating a structured array for the event's cells
