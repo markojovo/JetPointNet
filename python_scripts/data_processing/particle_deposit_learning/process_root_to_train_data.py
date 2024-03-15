@@ -7,8 +7,8 @@ import awkward as ak
 import multiprocessing
 import vector
 
-import warnings
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+#import warnings
+#warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 sys.path.append("/home/mjovanovic/Work/PointNet_Segmentation")
 from utils.track_metadata import *
@@ -47,9 +47,16 @@ def process_events(args):
     }     
     if not preprocessed:
         # load file_len sized chunk of root file, starting at event_start_idx to process into one file
-        for events_arr in event_root_data.iterate(features_of_interest, step_size=file_len, entry_start=event_start_idx, entry_stop=(event_start_idx + file_len), library="np"):
-            file_idx = int(event_start_idx/file_len)
 
+        print("Entering preprocessing...")
+        print("len of stuff: ",len(event_root_data))
+
+        for events_arr in event_root_data.iterate(['cluster_cell_E'], step_size=10, entry_start=0, entry_stop=10, library="np"):
+            print("Iteration successful.")
+        for events_arr in event_root_data.iterate(features_of_interest, step_size=file_len, entry_start=event_start_idx, entry_stop=(event_start_idx + file_len), library="np"):
+            print("wadwa")
+            print("Going into keys...")
+            file_idx = int(event_start_idx/file_len)
             for key in events_arr.keys():
                 events_arr[key] = ak.Array(events_arr[key])
 
@@ -152,7 +159,8 @@ def process_events(args):
             np.save(save_dir + dataset + "_processed_test_files/" + file_label + file_details, event_data)
 
     else:
-        event_data = np.load(save_dir + dataset + "_processed_test_files/" + preprocessed_file_name[:-8] + ".npz.npy", allow_pickle=True).item()
+        print("already preprocessed")
+        event_data = np.load(save_dir + dataset + "_processed_test_files/" + preprocessed_file_name[:-8] + ".npz", allow_pickle=True).item()
         file_label = "_".join(preprocessed_file_name.split("_")[:1])
         file_details = "_".join(preprocessed_file_name.split("_")[2:6])
 
@@ -180,6 +188,7 @@ def process_events(args):
         
     
     else:
+        print("rho")
         file_name = file_label + "_" + file_details
 
 
@@ -552,8 +561,8 @@ if __name__ == "__main__":
 
     # start a multiprocessing pool to convert each file on its own process
     starting_event_idxs = [file_len*batch_idx + starting_event_idx for batch_idx in range(num_files_to_process)]
-    preprocessed_file_names = list(map(lambda i:  preprocessed_file_name + "_len_" + str(file_len) + "_i_" + str(i) + ".npz.npy", np.arange(i_low, i_high + 1)))
-
+    preprocessed_file_names = list(map(lambda i:  preprocessed_file_name + "_len_" + str(file_len) + "_i_" + str(i) + ".npz", np.arange(i_low, i_high + 1)))
+    features_of_interest = ["cluster_cell_E", "cluster_cell_hitsE_EM", "cluster_cell_hitsE_nonEM", "cluster_cell_hitsTruthE", "cluster_cell_hitsTruthIndex", "cluster_cell_ID",  "truthPartPhi", "truthPartEta", "truthPartPt"]
     print("Starting processing...")
     if preprocessed:
         event_root_data = "null"
@@ -561,7 +570,6 @@ if __name__ == "__main__":
         pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case, regression) for preprocessed_file_name in preprocessed_file_names])
     else:
         event_root_data = uproot.open(events_root_file)["EventTree"]
-        preprocessed_file_name = "null"
         pool.map(process_events, [(event_root_data, preprocessed, preprocessed_file_name, event_start_idx, file_len, features_of_interest, dataset, file_name, save_dir, node_feature_names, cell_geo_data, sorter, max_points_queue, include_delta_p_pi0, include_delta_n_pi0, include_delta_p_pipm, include_delta_n_pipm, niche_case, regression) for event_start_idx in starting_event_idxs])
 
     # as files are processed and the max num points are added to queue on completion, compare with current max 
