@@ -215,8 +215,7 @@ def build_labels_array(tracks_sample_array, max_sample_length):
 # =======================================================================================================================
 # ============ PROCESSING CODE FUNCTIONS ================================================================================
 
-def process_and_filter_cells(event, cellgeo):
-    """
+def process_and_filter_cells(event, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo):    """
     Parameters:
     - event: The event data containing cell and track information.
     - cellgeo: Geometric information about the cells.
@@ -244,7 +243,6 @@ def process_and_filter_cells(event, cellgeo):
     #print(len(cell_part_truth_Es_with_multiples))
     #print(len(cell_part_truth_Idxs_with_multiples))
 
-    
     # Finding unique cell IDs and their first occurrence indices
     _, unique_indices = np.unique(ak.to_numpy(cell_IDs_with_multiples), return_index=True)
 
@@ -254,10 +252,15 @@ def process_and_filter_cells(event, cellgeo):
     cell_hitsTruthIndices = cell_part_truth_Idxs_with_multiples[unique_indices]
     cell_hitsTruthEs = cell_part_truth_Es_with_multiples[unique_indices]
 
+    print("got here")
 
     # Matching cells with their geometric data
     cell_ID_geo_array = np.array(cellgeo["cell_geo_ID"].array(library="ak")[0])
+    print("got here 2")
+
     mask = np.isin(cell_ID_geo_array, np.array(cell_IDs))
+    print("got here 3")
+
     indices = np.where(mask)[0]
 
     # Extracting and mapping geometric data to the filtered cells
