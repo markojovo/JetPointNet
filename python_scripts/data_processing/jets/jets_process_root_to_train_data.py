@@ -144,7 +144,7 @@ for data in events.iterate(fields_list, library="ak", step_size="100MB"):
 # After processing, convert the ArrayBuilder to an actual Awkward array and print it
 tracks_sample_array = tracks_sample.snapshot()
 
-print_events(tracks_sample_array, 1)
+print_events(tracks_sample_array, 3)
 
 
 max_sample_length = calculate_max_sample_length(tracks_sample_array)

@@ -331,38 +331,6 @@ def add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields):
 
     return track_eta_ref, track_phi_ref, track_part_Idx
 
-# =======================================================================================================================
-
-def add_track_intersection_info(tracks_sample, track_idx, track_eta, track_phi, calculate_track_intersections):
-    """
-    Adds track X, Y, Z path points (intersections with cell layers) to the tracks_sample ArrayBuilder.
-
-    Parameters:
-    - tracks_sample: The Awkward ArrayBuilder to which the intersection points will be added.
-    - track_idx: Index of the current track being processed.
-    - track_eta: Dictionary of track eta values for each layer.
-    - track_phi: Dictionary of track phi values for each layer.
-    - calculate_track_intersections: Function to calculate the intersections of the track with cell layers.
-    """
-    # Calculate intersections for the track
-    track_intersections = calculate_track_intersections({layer: eta[track_idx] for layer, eta in track_eta.items()},
-                                                        {layer: phi[track_idx] for layer, phi in track_phi.items()})
-    
-    # Add track intersection information
-    tracks_sample.field("track_layer_intersections")
-    tracks_sample.begin_list()  # Start list of intersection points for this track
-    for layer, (x, y, z) in track_intersections.items():
-        tracks_sample.begin_record()  # Each intersection point is a record
-        tracks_sample.field("layer")
-        tracks_sample.string(layer)
-        tracks_sample.field("X")
-        tracks_sample.real(x)
-        tracks_sample.field("Y")
-        tracks_sample.real(y)
-        tracks_sample.field("Z")
-        tracks_sample.real(z)
-        tracks_sample.end_record()  # End the record for this intersection point
-    tracks_sample.end_list()  # End list of intersection points
 
 # =======================================================================================================================
 
@@ -440,6 +408,7 @@ def process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx
     
 
     for cell_idx in range(len(filtered_cells)):
+        # TODO: MAKE IT ONLY ADD CELLS THAT HAVE ANY TRUTH_HIT_INDEX IN THEM
         tracks_sample.begin_record()
         tracks_sample.field("ID").integer(filtered_cells[cell_idx]["ID"])
         tracks_sample.field("E").real(filtered_cells[cell_idx]["E"])
@@ -459,12 +428,7 @@ def process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx
 
         cell_part_IDs = filtered_cell_truths[cell_idx]["cell_hitsTruthIndices"]
 
-        tracks_sample.field("cell_Hits_TruthIndices")
-        tracks_sample.begin_list()
-        for part in cell_part_IDs:
-            tracks_sample.integer(part)
-        tracks_sample.end_list()
-                
+
         if track_part_Idx in cell_part_IDs:
             found_index = np.where(cell_part_IDs == track_part_Idx)[0][0]  # Locate index of track_part_Idx in cell_part_IDs
             part_energy = filtered_cell_truths[cell_idx]["cell_hitsTruthEs"][found_index]  # Retrieve corresponding energy deposit
@@ -473,7 +437,13 @@ def process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx
             tracks_sample.field("Label").real(energy_fraction)
         else:
             tracks_sample.field("Label").real(0)
-
+            
+        tracks_sample.field("cell_Hits_TruthIndices")
+        tracks_sample.begin_list()
+        for part in cell_part_IDs:
+            tracks_sample.integer(part)
+        tracks_sample.end_list()
+                
         #print(filtered_cell_truths[cell_idx]["cell_hitsTruthIndices"])
         #print(filtered_cell_truths[cell_idx]["cell_hitsTruthEs"])
 
@@ -525,6 +495,7 @@ def process_associated_tracks(event, tracks_sample, track_eta_ref, track_phi_ref
         if delta_r_adj <= MAX_DISTANCE:
             tracks_sample.begin_record()
             tracks_sample.field("trackId").integer(adj_track_idx)
+            tracks_sample.field("track_part_Idx").integer(event["trackTruthParticleIndex"][adj_track_idx])
             tracks_sample.field("trackPt").real(event["trackPt"][adj_track_idx])
 
             tracks_sample.field("track_layer_intersections")

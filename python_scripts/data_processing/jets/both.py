@@ -19,30 +19,3 @@ GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
 SAVE_LOC = '/data/mjovanovic/jets/mltree_JZ1_0_5000events_data/training_data.npz'
 
 
-''''
-# old ending of the program (when saving to numpy)
-
-feats = build_input_array(tracks_sample_array, max_sample_length)
-labs = build_labels_array(tracks_sample_array, max_sample_length)
-save_data = (feats, labs)
-
-index = 9
-
-print(feats[index])
-print(labs[index])
-print(len(feats))
-print(len(labs))
-print("Maximum sample size (original track + associated cells + associated track points): ",max_sample_length)
-
-print("Stopping Timer...")
-finish_time = time.time()
-
-print("Saving to: ", SAVE_LOC)
-
-np.savez(SAVE_LOC, features = feats, labels = labs)
-
-duration = finish_time - start_time
-
-print(f"Total time to run for {event_idx + 1} events took {duration/60/60} hours")
-
-'''
