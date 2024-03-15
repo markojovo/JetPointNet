@@ -23,7 +23,7 @@ for key in cellgeo.keys():
 track_layer_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers] # Getting all the cell layer points that the track hits (ie trackEta_EME2, trackPhi_EMB3, etc)
 
 jets_other_included_fields = ["trackSubtractedCaloEnergy", "trackPt", "nTrack", "cluster_cell_ID",
-                          "trackNumberDOF","trackChiSquared","cluster_cell_E","cluster_fullHitsTruthIndex","cluster_fullHitsTruthE"]
+                          "trackNumberDOF","trackChiSquared","cluster_cell_E","cluster_cell_hitsTruthIndex","cluster_cell_hitsTruthE", "trackTruthParticleIndex"]
 
 fields_list = track_layer_branches + jets_other_included_fields
 
@@ -68,11 +68,9 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
                 ("trackEta_EME2", "real"),
                 ("trackPhi_EME2", "real"),
                 ("trackSubtractedCaloEnergy", "real"),
-                ("trackPt", "real")
-                #("trackNumberDOF", "integer"),
-                #("trackChiSquared", "real")
+                ("trackPt", "real"),
+                ("trackChiSquared/trackNumberDOF", "real"),
             ]
-
             track_eta_ref, track_phi_ref = add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields)
             '''
             ============================================================
@@ -111,7 +109,32 @@ for data in events.iterate(fields_list, library="ak", step_size="500MB"):
             ============================================================
             =======
             '''
+            
+
+
+            '''
+            GET CELL, TRACK AND ASSOCIATED TRACK LABELS
+            ============================================================
+            '''
+            #skip those with -1 anafter
+
+            #print()
+            
+            #print("trackTruthParticleIndex", event["trackTruthParticleIndex"])
+            #print("cluster hit truth index", ak.flatten((event["cluster_cell_hitsTruthIndex"])))
+            #print("cluster hit truth E", event["cluster_cell_hitsTruthE"])
+            #exit()
+            
+            
+            '''
+            ============================================================
+            =======
+            '''
+
+
+            ''
             tracks_sample.end_record()  # End the record for the current track
+            
 
 
         tracks_sample.end_list()  # End the list for the current event

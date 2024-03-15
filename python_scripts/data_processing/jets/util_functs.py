@@ -89,6 +89,8 @@ def print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT):
         print("New event")
         # Each event can contain multiple tracks
         for track in event:
+            #if (len(track["associated_cells"]) == 0):
+            #    continue
             print("  Track")
             # Now, print each field and its value for the track
             for field in track:
@@ -234,6 +236,8 @@ def process_and_filter_cells(event, cellgeo):
     # Extracting cell IDs and energies, assuming they are part of clusters
     cell_IDs_with_multiples = ak.flatten(event['cluster_cell_ID'])
     cell_Es_with_multiples = ak.flatten(event['cluster_cell_E'])
+    cell_part_truth_Idxs_with_multiples = ak.flatten(event['cluster_cell_hitsTruthIndex'])
+    cell_part_truth_Es_with_multiples = ak.flatten(event['cluster_cell_hitsTruthE'])
 
     # Finding unique cell IDs and their first occurrence indices
     _, unique_indices = np.unique(ak.to_numpy(cell_IDs_with_multiples), return_index=True)
@@ -241,6 +245,8 @@ def process_and_filter_cells(event, cellgeo):
     # Selecting corresponding unique cell data
     cell_IDs = cell_IDs_with_multiples[unique_indices]
     cell_Es = cell_Es_with_multiples[unique_indices]
+    cell_part_truth_Idxs = cell_part_truth_Idxs_with_multiples[unique_indices]
+    cell_part_truth_Es = cell_part_truth_Es_with_multiples[unique_indices]
 
     # Matching cells with their geometric data
     cell_ID_geo_array = np.array(cellgeo["cell_geo_ID"].array(library="ak")[0])
@@ -255,6 +261,7 @@ def process_and_filter_cells(event, cellgeo):
     # Calculating Cartesian coordinates for the cells
     cell_Xs, cell_Ys, cell_Zs = calculate_cartesian_coordinates(cell_Etas, cell_Phis, cell_rPerps)
 
+
     # Creating a structured array for the event's cells
     event_cells = ak.zip({
         'ID': cell_IDs,
@@ -264,6 +271,8 @@ def process_and_filter_cells(event, cellgeo):
         'X': cell_Xs,
         'Y': cell_Ys,
         'Z': cell_Zs
+        #'cell_part_truth_Idxs':cell_part_truth_Idxs,
+        #'cell_part_truth_Es':cell_part_truth_Es
     })
 
     # Preparing track eta and phi data for all layers
@@ -302,7 +311,10 @@ def add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields):
                 tracks_sample.integer(event[field_name][track_idx])
         elif field_type == "real":
             # For real number fields
-            if not event[field_name][track_idx] < UPROOT_MASK_VALUE_THRESHOLD:
+            if field_name == "trackChiSquared/trackNumberDOF":
+                tracks_sample.real(event["trackChiSquared"][track_idx]/event["trackNumberDOF"][track_idx])
+                
+            elif not event[field_name][track_idx] < UPROOT_MASK_VALUE_THRESHOLD:
                 tracks_sample.real(event[field_name][track_idx])
 
     return track_eta_ref, track_phi_ref
@@ -476,7 +488,7 @@ def process_associated_tracks(event, tracks_sample, track_eta_ref, track_phi_ref
         # Check if adjacent track is within MAX_DISTANCE
         if delta_r_adj <= MAX_DISTANCE:
             tracks_sample.begin_record()
-            tracks_sample.field("trackIdx").integer(adj_track_idx)
+            tracks_sample.field("trackId").integer(adj_track_idx)
             tracks_sample.field("trackPt").real(event["trackPt"][adj_track_idx])
 
             tracks_sample.field("track_layer_intersections")
