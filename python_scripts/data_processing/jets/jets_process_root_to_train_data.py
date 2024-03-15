@@ -44,13 +44,12 @@ for data in events.iterate(fields_list, library="ak", step_size="100MB"):
     print(f"Processing a batch of {len(data)} events.")
     for event_idx, event in enumerate(data):
         print(f"Processing event: {event_idx + 1}")
-
         if NUM_EVENTS_TO_USE is not None:
             if event_idx >= NUM_EVENTS_TO_USE:  # Limiting processing for demonstration
                 break
 
 
-        event_cells, track_etas, track_phis = process_and_filter_cells(event, cellgeo)
+        event_cells, event_cell_truths, track_etas, track_phis = process_and_filter_cells(event, cellgeo)
         
 
         tracks_sample.begin_list()  # Start a new list for each event to hold tracks
@@ -72,7 +71,7 @@ for data in events.iterate(fields_list, library="ak", step_size="100MB"):
                 ("trackPt", "real"),
                 ("trackChiSquared/trackNumberDOF", "real"),
             ]
-            track_eta_ref, track_phi_ref = add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields)
+            track_eta_ref, track_phi_ref, track_part_Idx = add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields)
             '''
             ============================================================
             =======
@@ -94,7 +93,7 @@ for data in events.iterate(fields_list, library="ak", step_size="100MB"):
             GET ASSOCIATED CELL INFO (Those within deltaR of track)
             ============================================================
             '''
-            process_associated_cell_info(event_cells, tracks_sample, track_eta_ref, track_phi_ref, track_intersections)
+            process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx, tracks_sample, track_eta_ref, track_phi_ref, track_intersections)
             '''
             ============================================================
             =======
@@ -140,12 +139,19 @@ for data in events.iterate(fields_list, library="ak", step_size="100MB"):
 
         tracks_sample.end_list()  # End the list for the current event
         print()
+    break
 
 # After processing, convert the ArrayBuilder to an actual Awkward array and print it
 tracks_sample_array = tracks_sample.snapshot()
 
-#print_events(tracks_sample_array, 1)
+print_events(tracks_sample_array, 1)
 
 
 max_sample_length = calculate_max_sample_length(tracks_sample_array)
+print("The maximum number of samples (track points + associated cells + associated track points) among these events is: ",max_sample_length)
+print("Ending Timer...")
+end_time = time.time()
 
+time_diff = end_time - start_time
+
+print("Total Time Elapsed: ", time_diff/60/60, " Hours")

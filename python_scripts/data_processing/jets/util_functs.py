@@ -216,13 +216,7 @@ def build_labels_array(tracks_sample_array, max_sample_length):
 # ============ PROCESSING CODE FUNCTIONS ================================================================================
 
 def process_and_filter_cells(event, cellgeo):
-
     """
-    GRABBING ONLY CLUSTERED CELLS, SO WE CAN IGNORE ANY CELLS NOT IN ANY CLUSTER
-        (THEN UNFLATTENING SO WE HAVE A MASTER LIST OF FILTERED CELLS FOR THIS EVENT)
-        ============================================================
-    Process and filter cell data for an event, returning structured data for further analysis.
-
     Parameters:
     - event: The event data containing cell and track information.
     - cellgeo: Geometric information about the cells.
@@ -234,34 +228,32 @@ def process_and_filter_cells(event, cellgeo):
     """
 
     # Extracting cell IDs and energies, assuming they are part of clusters
+
+    # TODO use hitsE_EM for trucating so that it matches Jessica's code
+    truncated_hitsTruthIndex = [cluster_hitsTruthIndex[:len(cluster_ID)] for cluster_ID, cluster_hitsTruthIndex in zip(event['cluster_cell_ID'], event['cluster_cell_hitsTruthIndex'])]
+    truncated_hitsTruthE = [cluster_hitsTruthE[:len(cluster_ID)] for cluster_ID, cluster_hitsTruthE in zip(event['cluster_cell_ID'], event['cluster_cell_hitsTruthE'])]
+
+    # Step 2: Flatten the arrays now that they've been truncated
     cell_IDs_with_multiples = ak.flatten(event['cluster_cell_ID'])
     cell_Es_with_multiples = ak.flatten(event['cluster_cell_E'])
-    
-    mask_hitsTruthIndex = ak.num(event['cluster_cell_hitsTruthIndex'], axis=2) > 0
-    mask_hitsTruthE = ak.num(event['cluster_cell_hitsTruthE'], axis=2) > 0
+    cell_part_truth_Idxs_with_multiples = ak.flatten(truncated_hitsTruthIndex)
+    cell_part_truth_Es_with_multiples = ak.flatten(truncated_hitsTruthE)
 
-    cell_part_truth_Idxs_with_multiples = ak.flatten(event['cluster_cell_hitsTruthIndex'][mask_hitsTruthIndex])
-    cell_part_truth_Es_with_multiples = ak.flatten(event['cluster_cell_hitsTruthE'][mask_hitsTruthE])
+    #print(len(cell_Es_with_multiples))
+    #print(len(cell_IDs_with_multiples))
+    #print(len(cell_part_truth_Es_with_multiples))
+    #print(len(cell_part_truth_Idxs_with_multiples))
 
     
-    print(event['cluster_cell_E'])
-    print(len(cell_Es_with_multiples))
-    print(len(cell_IDs_with_multiples))
-    print(len(cell_part_truth_Idxs_with_multiples))
-    print(len(cell_part_truth_Es_with_multiples))
-    print()
-    
-
     # Finding unique cell IDs and their first occurrence indices
     _, unique_indices = np.unique(ak.to_numpy(cell_IDs_with_multiples), return_index=True)
 
     # Selecting corresponding unique cell data
     cell_IDs = cell_IDs_with_multiples[unique_indices]
     cell_Es = cell_Es_with_multiples[unique_indices]
+    cell_hitsTruthIndices = cell_part_truth_Idxs_with_multiples[unique_indices]
+    cell_hitsTruthEs = cell_part_truth_Es_with_multiples[unique_indices]
 
-    #cell_part_truth_Idxs = cell_part_truth_Idxs_with_multiples[unique_indices]
-    #cell_part_truth_Es = cell_part_truth_Es_with_multiples[unique_indices]
-    
 
     # Matching cells with their geometric data
     cell_ID_geo_array = np.array(cellgeo["cell_geo_ID"].array(library="ak")[0])
@@ -276,8 +268,6 @@ def process_and_filter_cells(event, cellgeo):
     # Calculating Cartesian coordinates for the cells
     cell_Xs, cell_Ys, cell_Zs = calculate_cartesian_coordinates(cell_Etas, cell_Phis, cell_rPerps)
 
-
-
     # Creating a structured array for the event's cells
     event_cells = ak.zip({
         'ID': cell_IDs,
@@ -286,16 +276,19 @@ def process_and_filter_cells(event, cellgeo):
         'phi': cell_Phis,
         'X': cell_Xs,
         'Y': cell_Ys,
-        'Z': cell_Zs
-        #'cell_part_truth_Idxs':cell_part_truth_Idxs,
-        #'cell_part_truth_Es':cell_part_truth_Es
+        'Z': cell_Zs,
+    })
+
+    event_cell_truths = ak.zip({
+        'cell_hitsTruthIndices':cell_hitsTruthIndices,
+        'cell_hitsTruthEs':cell_hitsTruthEs
     })
 
     # Preparing track eta and phi data for all layers
     track_etas = {layer: event[f'trackEta_{layer}'] for layer in calo_layers}
     track_phis = {layer: event[f'trackPhi_{layer}'] for layer in calo_layers}
 
-    return event_cells, track_etas, track_phis
+    return event_cells, event_cell_truths, track_etas, track_phis
 
 # =======================================================================================================================
 
@@ -316,6 +309,9 @@ def add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields):
     tracks_sample.field("trackEta").real(track_eta_ref)
     tracks_sample.field("trackPhi").real(track_phi_ref)
 
+    track_part_Idx = event["trackTruthParticleIndex"][track_idx]
+    tracks_sample.field("track_part_Idx").integer(track_part_Idx)
+
     # Process additional fields based on the provided list
     for field_name, field_type in fields:
         tracks_sample.field(field_name)
@@ -333,7 +329,7 @@ def add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields):
             elif not event[field_name][track_idx] < UPROOT_MASK_VALUE_THRESHOLD:
                 tracks_sample.real(event[field_name][track_idx])
 
-    return track_eta_ref, track_phi_ref
+    return track_eta_ref, track_phi_ref, track_part_Idx
 
 # =======================================================================================================================
 
@@ -398,6 +394,7 @@ def add_track_intersection_info(tracks_sample, track_idx, track_eta, track_phi):
         tracks_sample.real(y)
         tracks_sample.field("Z")
         tracks_sample.real(z)
+        tracks_sample.field("Label").real(1)
         tracks_sample.end_record()  # End the record for this intersection point
     tracks_sample.end_list()  # End list of intersection points
 
@@ -405,7 +402,7 @@ def add_track_intersection_info(tracks_sample, track_idx, track_eta, track_phi):
 
 # =======================================================================================================================
 
-def process_associated_cell_info(event_cells, tracks_sample, track_eta_ref, track_phi_ref, track_intersections):
+def process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx, tracks_sample, track_eta_ref, track_phi_ref, track_intersections):
     """
     Process cells associated with a track based on ΔR and other criteria.
 
@@ -430,7 +427,10 @@ def process_associated_cell_info(event_cells, tracks_sample, track_eta_ref, trac
 
     # Apply the mask to filter cells directly using Awkward Array's boolean masking
     filtered_cells = event_cells[mask]
-    tracks_sample.field("total_associated_cell_energy").real(sum(filtered_cells["E"]))
+    filtered_cell_truths = event_cell_truths[mask]
+
+
+    tracks_sample.field("total_associated_cell_energy").real(ak.sum(filtered_cells["E"]))
 
     # Preparing to add the filtered cells to the track sample
     tracks_sample.field("associated_cells")
@@ -438,24 +438,44 @@ def process_associated_cell_info(event_cells, tracks_sample, track_eta_ref, trac
 
     track_intersection_points = [(x, y, z) for layer, (x, y, z) in track_intersections.items()]
     
-    # Iterate over filtered cells
-    for cell in filtered_cells:
+
+    for cell_idx in range(len(filtered_cells)):
         tracks_sample.begin_record()
-        tracks_sample.field("ID").integer(cell["ID"])
-        tracks_sample.field("E").real(cell["E"])
-        tracks_sample.field("X").real(cell["X"])
-        tracks_sample.field("Y").real(cell["Y"])
-        tracks_sample.field("Z").real(cell["Z"])
+        tracks_sample.field("ID").integer(filtered_cells[cell_idx]["ID"])
+        tracks_sample.field("E").real(filtered_cells[cell_idx]["E"])
+        tracks_sample.field("X").real(filtered_cells[cell_idx]["X"])
+        tracks_sample.field("Y").real(filtered_cells[cell_idx]["Y"])
+        tracks_sample.field("Z").real(filtered_cells[cell_idx]["Z"])
         
         # Calculate distances to each track intersection point and find the minimum
-        cell_x, cell_y, cell_z = cell["X"], cell["Y"], cell["Z"]
+        cell_x, cell_y, cell_z = filtered_cells[cell_idx]["X"], filtered_cells[cell_idx]["Y"], filtered_cells[cell_idx]["Z"]
         min_distance = min(
             np.sqrt((x - cell_x) ** 2 + (y - cell_y) ** 2 + (z - cell_z) ** 2)
             for x, y, z in track_intersection_points
         )
         tracks_sample.field("distance_to_track").real(min_distance)
-        tracks_sample.field("eta").real(cell["eta"])
-        tracks_sample.field("phi").real(cell["phi"])
+        tracks_sample.field("eta").real(filtered_cells[cell_idx]["eta"])
+        tracks_sample.field("phi").real(filtered_cells[cell_idx]["phi"])
+
+        cell_part_IDs = filtered_cell_truths[cell_idx]["cell_hitsTruthIndices"]
+
+        tracks_sample.field("cell_Hits_TruthIndices")
+        tracks_sample.begin_list()
+        for part in cell_part_IDs:
+            tracks_sample.integer(part)
+        tracks_sample.end_list()
+                
+        if track_part_Idx in cell_part_IDs:
+            found_index = np.where(cell_part_IDs == track_part_Idx)[0][0]  # Locate index of track_part_Idx in cell_part_IDs
+            part_energy = filtered_cell_truths[cell_idx]["cell_hitsTruthEs"][found_index]  # Retrieve corresponding energy deposit
+            total_energy = np.sum(filtered_cell_truths[cell_idx]["cell_hitsTruthEs"])  # Sum of all particle energy deposits in the cell
+            energy_fraction = part_energy / total_energy  # Calculate energy fraction
+            tracks_sample.field("Label").real(energy_fraction)
+        else:
+            tracks_sample.field("Label").real(0)
+
+        #print(filtered_cell_truths[cell_idx]["cell_hitsTruthIndices"])
+        #print(filtered_cell_truths[cell_idx]["cell_hitsTruthEs"])
 
         tracks_sample.end_record()
 
@@ -524,6 +544,7 @@ def process_associated_tracks(event, tracks_sample, track_eta_ref, track_phi_ref
                 tracks_sample.field("Y").real(y)
                 tracks_sample.field("Z").real(z)
                 tracks_sample.field("distance_to_track").real(min_distance_to_focal)
+                tracks_sample.field("Label").real(0)
                 tracks_sample.end_record()
 
             tracks_sample.end_list()
