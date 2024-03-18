@@ -16,6 +16,6 @@ FILE_LOC = "/data/atlas/mltree_1000.root"
 #FILE_LOC = "/data/mjovanovic/cell_particle_deposit_learning/rho/rho_root_files/rho_full.root"
 GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
 
-SAVE_LOC = '/data/mjovanovic/jets/mltree_JZ1_0_5000events_data/training_data.npz'
+SAVE_LOC = '/data/mjovanovic/jets/outputAwks/'
 
 
