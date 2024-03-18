@@ -429,6 +429,7 @@ def process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx
         tracks_sample.field("phi").real(filtered_cells[cell_idx]["phi"])
 
         cell_part_IDs = filtered_cell_truths[cell_idx]["cell_hitsTruthIndices"]
+        cell_part_Es = filtered_cell_truths[cell_idx]["cell_hitsTruthEs"]
 
 
         if track_part_Idx in cell_part_IDs:
@@ -446,6 +447,12 @@ def process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx
             tracks_sample.integer(part)
         tracks_sample.end_list()
                 
+
+        tracks_sample.field("cell_Hits_TruthEs")
+        tracks_sample.begin_list()
+        for part in cell_part_Es:
+            tracks_sample.real(part)
+        tracks_sample.end_list()
         #print(filtered_cell_truths[cell_idx]["cell_hitsTruthIndices"])
         #print(filtered_cell_truths[cell_idx]["cell_hitsTruthEs"])
 
