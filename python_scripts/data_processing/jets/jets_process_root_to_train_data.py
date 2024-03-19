@@ -35,7 +35,6 @@ def split_and_save_to_disk(processed_data, base_filename):
     os.makedirs(val_dir, exist_ok=True)
     os.makedirs(test_dir, exist_ok=True)
     
-    start_time = time.time()
 
     # Split data
     train_data = processed_data[:train_cutoff]
@@ -46,9 +45,7 @@ def split_and_save_to_disk(processed_data, base_filename):
     ak.to_parquet(train_data, os.path.join(train_dir, base_filename + '_train.parquet'))
     ak.to_parquet(val_data, os.path.join(val_dir, base_filename + '_val.parquet'))
     ak.to_parquet(test_data, os.path.join(test_dir, base_filename + '_test.parquet'))
-    
-    end_time = time.time()
-    print(f"Time to split and save: {end_time - start_time:.2f} seconds")
+
 
 
 def process_events(data, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo, thread_id,  progress_dict):
@@ -150,7 +147,6 @@ if __name__ == "__main__":
     events = uproot.open(FILE_LOC + ":EventTree")
     cellgeo = uproot.open(GEO_FILE_LOC + ":CellGeo")
 
-    # Your existing setup code remains unchanged
     print("Events Keys:")
     for key in events.keys():
         print(key)
@@ -178,8 +174,11 @@ if __name__ == "__main__":
             progress_dict[str(i)] = 0.0
 
         processed_data = process_chunk_with_progress(chunk, cell_ID_geo, eta_geo, phi_geo, rPerp_geo, progress_dict)
-        filename = f"{SAVE_LOC}processed_chunk_{chunk_counter}.parquet"
-        save_to_disk(processed_data, filename)
+        
+        # Instead of saving the whole chunk to a single file, now split it into train/val/test and save
+        base_filename = f"chunk_{chunk_counter}"
+        split_and_save_to_disk(processed_data, base_filename)
+        
         chunk_counter += 1
 
     # Ensure the monitoring thread knows processing is complete
@@ -190,4 +189,4 @@ if __name__ == "__main__":
     progress_thread.join()
 
     end_time = time.time()
-    print("Total Time Elapsed: ", (end_time - start_time) / 60 / 60, " Hours")
+    print(f"Total Time Elapsed: {(end_time - start_time) / 60 / 60:.2f} Hours")

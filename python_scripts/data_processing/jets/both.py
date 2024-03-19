@@ -4,8 +4,8 @@ from utils.track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # A
 HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
 
 NUM_EVENTS_PER_CHUNK = 250
-TRAIN_SPLIT_RATIO = 0.7
-VAL_SPLIT_RATIO = 0.2
+TRAIN_SPLIT_RATIO = 0.8
+VAL_SPLIT_RATIO = 0.1
 # TEST_SPLIT_RATIO is implied to be the remaining percentage
 NUM_THREAD_PER_CHUNK = 12
 
