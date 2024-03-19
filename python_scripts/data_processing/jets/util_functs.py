@@ -215,7 +215,7 @@ def build_labels_array(tracks_sample_array, max_sample_length):
 # =======================================================================================================================
 # ============ PROCESSING CODE FUNCTIONS ================================================================================
 
-def process_and_filter_cells(event, cellgeo):
+def process_and_filter_cells(event, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo):
     """
     Parameters:
     - event: The event data containing cell and track information.
@@ -244,7 +244,6 @@ def process_and_filter_cells(event, cellgeo):
     #print(len(cell_part_truth_Es_with_multiples))
     #print(len(cell_part_truth_Idxs_with_multiples))
 
-    
     # Finding unique cell IDs and their first occurrence indices
     _, unique_indices = np.unique(ak.to_numpy(cell_IDs_with_multiples), return_index=True)
 
@@ -254,21 +253,22 @@ def process_and_filter_cells(event, cellgeo):
     cell_hitsTruthIndices = cell_part_truth_Idxs_with_multiples[unique_indices]
     cell_hitsTruthEs = cell_part_truth_Es_with_multiples[unique_indices]
 
-
     # Matching cells with their geometric data
-    cell_ID_geo_array = np.array(cellgeo["cell_geo_ID"].array(library="ak")[0])
+    cell_ID_geo_array =  cell_ID_geo #np.array(cellgeo["cell_geo_ID"].array(library="ak")[0])
+
     mask = np.isin(cell_ID_geo_array, np.array(cell_IDs))
+
     indices = np.where(mask)[0]
 
     # Extracting and mapping geometric data to the filtered cells
-    cell_Etas = cellgeo["cell_geo_eta"].array(library="ak")[0][indices]
-    cell_Phis = cellgeo["cell_geo_phi"].array(library="ak")[0][indices]
-    cell_rPerps = cellgeo["cell_geo_rPerp"].array(library="ak")[0][indices]
+    cell_Etas = cell_eta_geo[indices] #cellgeo["cell_geo_eta"].array(library="ak")[0][indices]
+    cell_Phis = cell_phi_geo[indices] #cellgeo["cell_geo_phi"].array(library="ak")[0][indices]
+    cell_rPerps = cell_rPerp_geo[indices] #cellgeo["cell_geo_rPerp"].array(library="ak")[0][indices]
 
     # Calculating Cartesian coordinates for the cells
     cell_Xs, cell_Ys, cell_Zs = calculate_cartesian_coordinates(cell_Etas, cell_Phis, cell_rPerps)
-
     # Creating a structured array for the event's cells
+
     event_cells = ak.zip({
         'ID': cell_IDs,
         'E': cell_Es,
@@ -279,10 +279,12 @@ def process_and_filter_cells(event, cellgeo):
         'Z': cell_Zs,
     })
 
+
     event_cell_truths = ak.zip({
         'cell_hitsTruthIndices':cell_hitsTruthIndices,
         'cell_hitsTruthEs':cell_hitsTruthEs
     })
+    
 
     # Preparing track eta and phi data for all layers
     track_etas = {layer: event[f'trackEta_{layer}'] for layer in calo_layers}
@@ -427,6 +429,7 @@ def process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx
         tracks_sample.field("phi").real(filtered_cells[cell_idx]["phi"])
 
         cell_part_IDs = filtered_cell_truths[cell_idx]["cell_hitsTruthIndices"]
+        cell_part_Es = filtered_cell_truths[cell_idx]["cell_hitsTruthEs"]
 
 
         if track_part_Idx in cell_part_IDs:
@@ -444,6 +447,12 @@ def process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx
             tracks_sample.integer(part)
         tracks_sample.end_list()
                 
+
+        tracks_sample.field("cell_Hits_TruthEs")
+        tracks_sample.begin_list()
+        for part in cell_part_Es:
+            tracks_sample.real(part)
+        tracks_sample.end_list()
         #print(filtered_cell_truths[cell_idx]["cell_hitsTruthIndices"])
         #print(filtered_cell_truths[cell_idx]["cell_hitsTruthEs"])
 
