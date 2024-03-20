@@ -21,7 +21,11 @@ def split_and_save_to_disk(processed_data, base_filename):
     """
     Split the processed data into TRAIN, VAL, and TEST sets and save them to disk.
     """
-    num_events = len(processed_data['eventID'])
+    
+    # NOTE: THIS SPLITS BY TOTAL SAMPLE AMOUNT, AND NOT SPLITTING BY EVENT, SMALL CHANCE OF TRAIN-TEST OVERLAP (like in cells included in multiple tracks), change at some point later 
+    num_events = len(processed_data['eventID'])  #can probably just go max(processed_data['eventID']) - min(processed_data['eventID']) or something once eventIDs are being saved properly
+    # ===
+
     train_cutoff = int(num_events * TRAIN_SPLIT_RATIO)
     val_cutoff = train_cutoff + int(num_events * VAL_SPLIT_RATIO)
     
@@ -58,7 +62,7 @@ def process_events(data, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo
     """
     progress_dict[str(thread_id)] = 0.0  # Initialize progress
     tracks_sample = ak.ArrayBuilder()  # Initialize the awkward array structure for track samples
-    for event_idx, event in enumerate(data):
+    for event_idx, event in enumerate(data): # NOTE: CURRENTLY DOESNT PROPERLY SAVE THE ACTUAL EVENT ID, does some weird thing with the splitting for multiprocessing, make it save the event correctly
         if DEBUG_NUM_EVENTS_TO_USE is not None:
             if event_idx >= DEBUG_NUM_EVENTS_TO_USE:  # Limiting processing for demonstration
                 break
