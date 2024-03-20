@@ -1,11 +1,12 @@
-from util_functs import print_events, calculate_max_sample_length
+from util_functs import print_events, calculate_max_sample_length, build_labels_array, build_input_array
 from both import SAVE_LOC, NPZ_SAVE_LOC
 import awkward as ak
 import pyarrow.parquet as pq
 import numpy as np
 import os
+import time
 
-DATA_FOLDERS = ['train', 'test', 'val']
+DATA_FOLDERS =  ['train', 'test', 'val']
 
 def read_parquet(filename):
     table = pq.read_table(filename)
@@ -26,35 +27,28 @@ def find_global_max_sample_length():
     print(f"Global Max Sample Length: {global_max_sample_length}")
     return global_max_sample_length
 
-def print_first_sample_fields_from_first_train_file():
-    train_path = os.path.join(SAVE_LOC, 'train')
-    train_files = [f for f in os.listdir(train_path) if f.endswith('.parquet')]
-    if train_files:
-        first_file_path = os.path.join(train_path, train_files[0])
-        ak_array = read_parquet(first_file_path)
-        first_sample = ak_array[0]
-        print(f"Fields of the first sample: {first_sample.fields}")
-        print("Fields of the subarrays:")
-        f = first_sample["track_layer_intersections"].fields
-        print(f"Track Layer Intersections: {f}")
+global_max_sample_length = 859 #placeholder for now 
 
-        f = first_sample["associated_cells"].fields
-        print(f"Associated Cells: {f}")
-        f = first_sample["associated_tracks"].fields
-        print(f"Associated Tracks: {f}")
 
-        f = first_sample["associated_tracks"]["track_layer_intersections"].fields
-        print(f"Associated layer intersections: {f}")
+for data_folder in DATA_FOLDERS:
+    npz_data_folder_path = os.path.join(NPZ_SAVE_LOC, data_folder)
+    os.makedirs(npz_data_folder_path, exist_ok=True)  # Ensure the directory exists
+    print(f"Processing data for: {data_folder}")
 
-# Calculate the global maximum sample length across all files
-#global_max_sample_length = find_global_max_sample_length()
-global_max_sample_length = 859 #placeholder for now
+    for i in range(4):
+        print(f"  Working on chunk {i} in {data_folder}...", end="", flush=True)
+        start_time = time.time()
+        # Replace 'read_parquet', 'build_labels_array', and 'build_input_array' with your actual functions
+        ak_array = read_parquet(os.path.join(SAVE_LOC, data_folder, f'chunk_{i}_{data_folder}.parquet'))
 
-# Print the fields of the first sample from the first train file
-#print_first_sample_fields_from_first_train_file()
+        labels = build_labels_array(ak_array, global_max_sample_length)
+        feats = build_input_array(ak_array, global_max_sample_length)
 
-# Assuming ak_array is loaded with your Awkward Array data
-ak_array = read_parquet(os.path.join(SAVE_LOC, 'train', 'chunk_0_train.parquet'))
+        # Save the feats and labels arrays to an NPZ file for each chunk
+        npz_save_path = os.path.join(npz_data_folder_path, f'chunk_{i}_{data_folder}.npz')
+        np.savez(npz_save_path, feats=feats, labels=labels)
+        end_time = time.time()
+        print(f"    Saved {data_folder} chunk {i} to {npz_save_path}...", end="")
+        print(f"    Chunk processing took: ", end_time - start_time, "seconds")
 
-print_events(ak_array, 1)
-
+    print(f"Completed processing data for: {data_folder}")

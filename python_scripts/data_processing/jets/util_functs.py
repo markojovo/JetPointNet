@@ -124,7 +124,7 @@ def print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT):
 
 # =======================================================================================================================
 
-def build_input_array(tracks_sample_array, max_sample_length):
+def build_input_array(tracks_sample_array, max_sample_length): #MAKE THIS WORK WITH ARRAYS BIGGER THAN MAX_SAMPLE_LENGTH (SO WE CAN TRUNCATE)
     # Initialize an empty list to hold all samples
     samples = []
 
@@ -166,7 +166,7 @@ def build_input_array(tracks_sample_array, max_sample_length):
 
 # =======================================================================================================================
 
-def build_labels_array(tracks_sample_array, max_sample_length):
+def build_labels_array(tracks_sample_array, max_sample_length): #MAKE THIS WORK WITH ARRAYS BIGGER THAN MAX_SAMPLE_LENGTH (SO WE CAN TRUNCATE)
     # Initialize an empty list to hold all label arrays
     labels_list = []
 
@@ -187,8 +187,7 @@ def build_labels_array(tracks_sample_array, max_sample_length):
             # Set labels for focused track points to 1.0
             label_array[:num_focused_track_points] = 1.0
 
-            # Set labels for associated cells to 0.5
-            label_array[num_focused_track_points:num_focused_track_points+num_associated_cells] = 0.5
+            label_array[num_focused_track_points:num_focused_track_points+num_associated_cells] = track['associated_cells']['Label']
 
             # Set labels for associated track points to 0.0
             start_idx = num_focused_track_points + num_associated_cells
