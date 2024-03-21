@@ -41,16 +41,18 @@ def data_generator(data_dir, batch_size):
                 yield batch_feats, batch_labels.reshape(*batch_labels.shape, 1)  # Reshape labels to (batch_size, 859, 1)
 
 
-def custom_training_loss(y_true, y_pred):
-    # Mask to exclude points with a label of -1
+def custom_loss_for_training(y_true, y_pred):
     mask = tf.not_equal(y_true, -1)
-    # Apply the mask to both y_true and y_pred
     y_true_masked = tf.boolean_mask(y_true, mask)
     y_pred_masked = tf.boolean_mask(y_pred, mask)
-    # Calculate the loss for the masked values
-    loss = tf.keras.losses.binary_crossentropy(y_true_masked, y_pred_masked)
-    return tf.reduce_mean(loss)
+    return keras.losses.binary_crossentropy(y_true_masked, y_pred_masked)
 
+def custom_mae_metric_for_evaluation(y_true, y_pred, input_features):
+    # Assuming input_features is passed somehow to include the last feature of inputs
+    mask = tf.equal(input_features[..., -1], 0)
+    y_true_masked = tf.boolean_mask(y_true, mask)
+    y_pred_masked = tf.boolean_mask(y_pred, mask)
+    return keras.metrics.mean_absolute_error(y_true_masked, y_pred_masked)
 
 
 BATCH_SIZE = 32
