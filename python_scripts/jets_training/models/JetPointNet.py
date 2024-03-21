@@ -113,15 +113,17 @@ def PointNetRegression(num_points, n_classes):
     output_tensor = regression_net(x, n_classes)
     
     # Construct the model with two outputs: the main output and the pass-through type information
-    return tf.keras.Model(inputs=input_tensor, outputs=[output_tensor, type_info])
+    #return tf.keras.Model(inputs=input_tensor, outputs=[output_tensor, type_info])
+    return tf.keras.Model(inputs=input_tensor, outputs=output_tensor)
 
 
 
 
 def masked_training_loss(y_true, y_pred_outputs):
     # Access elements using TensorFlow operations
-    y_pred = y_pred_outputs[0]  # The first element: output_tensor
-    type_info = y_pred_outputs[1]  # The second element: type_info
+    #y_pred = y_pred_outputs[0]  # The first element: output_tensor
+    #type_info = y_pred_outputs[1]  # The second element: type_info
+    y_pred = y_pred_outputs
     
     mask = tf.not_equal(y_true, -1.0)
     mask = tf.cast(mask, tf.float32)

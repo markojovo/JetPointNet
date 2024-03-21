@@ -1,6 +1,4 @@
-import sys
-sys.path.append("/home/mjovanovic/Work/PointNet_Segmentation")
-from utils.track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
+from track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
 HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
 
 
