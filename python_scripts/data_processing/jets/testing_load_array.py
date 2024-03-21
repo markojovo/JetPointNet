@@ -52,3 +52,7 @@ for data_folder in DATA_FOLDERS:
         print(f"    Chunk processing took: ", end_time - start_time, "seconds")
 
     print(f"Completed processing data for: {data_folder}")
+
+
+
+#ADD STUFF FOR STORING THE METADATA WHEN GENERATING THESE AWKWARD ARRAYS, THEN SAVE IT OR SOMETHINGG FOR MAX SAMPLE LEGNTH? IDK

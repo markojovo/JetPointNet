@@ -302,6 +302,13 @@ def tnet(inputs: tf.Tensor, num_features: int, name: str, input_points, mask: tf
     return layers.Dot(axes=(2, 1), name=f"{name}_mm")([inputs, transformed_features])
 
 
+class FeatureMaskLayer(tf.keras.layers.Layer):
+    def call(self, inputs):
+        # Assuming inputs is the input feature tensor of shape (batch_size, points_per_sample, 6)
+        self.last_feature_mask = tf.equal(inputs[:, :, 5], 0)
+        return inputs  # This layer doesn't change the inputs, just stores the mask
+
+
 def pnet_part_seg_no_tnets(num_points: int, num_feat: int, num_classes: int) -> keras.Model:
     input_points = keras.Input(shape=(None, num_feat))
     full_mask = tf.logical_not(tf.math.equal(input_points, 0))
