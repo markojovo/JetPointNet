@@ -23,7 +23,7 @@ def split_and_save_to_disk(processed_data, base_filename):
     """
     
     # NOTE: THIS SPLITS BY TOTAL SAMPLE AMOUNT, AND NOT SPLITTING BY EVENT, SMALL CHANCE OF TRAIN-TEST OVERLAP (like in cells included in multiple tracks), change at some point later 
-    num_events = len(processed_data['eventID'])  #can probably just go max(processed_data['eventID']) - min(processed_data['eventID']) or something once eventIDs are being saved properly
+    num_events = len(processed_data['eventNumber'])  #can probably just go max(processed_data['eventNumber']) - min(processed_data['eventNumber']) or something once eventNumbers are being saved properly
     # ===
 
     train_cutoff = int(num_events * TRAIN_SPLIT_RATIO)
@@ -78,14 +78,14 @@ def process_events(data, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo
 
             # Meta info
             fields = [
-                ("eventID", "integer"),
+                ("eventNumber", "integer")
                 ("trackEta_EMB2", "real"),
                 ("trackPhi_EMB2", "real"),
                 ("trackEta_EME2", "real"),
                 ("trackPhi_EME2", "real"),
                 ("trackSubtractedCaloEnergy", "real"),
                 ("trackPt", "real"),
-                ("trackChiSquared/trackNumberDOF", "real"),
+                ("trackChiSquared/trackNumberDOF", "real")
             ]
             track_eta_ref, track_phi_ref, track_part_Idx = add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields)
 
@@ -161,7 +161,7 @@ if __name__ == "__main__":
 
     track_layer_branches = [f'trackEta_{layer}' for layer in calo_layers] + [f'trackPhi_{layer}' for layer in calo_layers]
     jets_other_included_fields = ["trackSubtractedCaloEnergy", "trackPt", "nTrack", "cluster_cell_ID",
-                                  "trackNumberDOF", "trackChiSquared", "cluster_cell_E", "cluster_cell_hitsTruthIndex", "cluster_cell_hitsTruthE", "trackTruthParticleIndex"]
+                                  "trackNumberDOF", "trackChiSquared", "cluster_cell_E", "cluster_cell_hitsTruthIndex", "cluster_cell_hitsTruthE", "trackTruthParticleIndex", "eventNumber"]
     fields_list = track_layer_branches + jets_other_included_fields
 
     cell_ID_geo = cellgeo["cell_geo_ID"].array(library="np")[0]

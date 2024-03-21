@@ -1,0 +1,166 @@
+Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Events Keys:
+runNumber
+eventNumber
+lumiBlock
+coreFlags
+mcEventNumber
+mcChannelNumber
+mcEventWeight
+nTruthPart
+truthPartBarcode
+truthPartPdgId
+G4PreCalo_n_EM
+G4PreCalo_E_EM
+G4PreCalo_n_Had
+G4PreCalo_E_Had
+truthVertexX
+truthVertexY
+truthVertexZ
+truthPartStatus
+truthPartPt
+truthPartE
+truthPartMass
+truthPartEta
+truthPartPhi
+nTrack
+trackPt
+trackP
+trackMass
+trackEta
+trackPhi
+trackTruthParticleIndex
+trackVisibleCalHitCaloEnergy
+trackFullCalHitCaloEnergy
+trackSubtractedCaloEnergy
+trackNumberOfPixelHits
+trackNumberOfSCTHits
+trackNumberOfPixelDeadSensors
+trackNumberOfSCTDeadSensors
+trackNumberOfPixelSharedHits
+trackNumberOfSCTSharedHits
+trackNumberOfPixelHoles
+trackNumberOfSCTHoles
+trackNumberOfInnermostPixelLayerHits
+trackNumberOfNextToInnermostPixelLayerHits
+trackExpectInnermostPixelLayerHit
+trackExpectNextToInnermostPixelLayerHit
+trackNumberOfTRTHits
+trackNumberOfTRTOutliers
+trackChiSquared
+trackNumberDOF
+trackD0
+trackZ0
+trackEta_PreSamplerB
+trackPhi_PreSamplerB
+trackEta_PreSamplerE
+trackPhi_PreSamplerE
+trackEta_EMB1
+trackPhi_EMB1
+trackEta_EMB2
+trackPhi_EMB2
+trackEta_EMB3
+trackPhi_EMB3
+trackEta_EME1
+trackPhi_EME1
+trackEta_EME2
+trackPhi_EME2
+trackEta_EME3
+trackPhi_EME3
+trackEta_HEC0
+trackPhi_HEC0
+trackEta_HEC1
+trackPhi_HEC1
+trackEta_HEC2
+trackPhi_HEC2
+trackEta_HEC3
+trackPhi_HEC3
+trackEta_TileBar0
+trackPhi_TileBar0
+trackEta_TileBar1
+trackPhi_TileBar1
+trackEta_TileBar2
+trackPhi_TileBar2
+trackEta_TileGap1
+trackPhi_TileGap1
+trackEta_TileGap2
+trackPhi_TileGap2
+trackEta_TileGap3
+trackPhi_TileGap3
+trackEta_TileExt0
+trackPhi_TileExt0
+trackEta_TileExt1
+trackPhi_TileExt1
+trackEta_TileExt2
+trackPhi_TileExt2
+nCluster
+cluster_E
+cluster_E_LCCalib
+cluster_Pt
+cluster_Eta
+cluster_Phi
+cluster_nCells
+cluster_ENG_CALIB_TOT
+cluster_ENG_CALIB_OUT_T
+cluster_ENG_CALIB_DEAD_TOT
+cluster_EM_PROBABILITY
+cluster_HAD_WEIGHT
+cluster_OOC_WEIGHT
+cluster_DM_WEIGHT
+cluster_CENTER_MAG
+cluster_FIRST_ENG_DENS
+cluster_CENTER_LAMBDA
+cluster_ISOLATION
+cluster_ENERGY_DigiHSTruth
+cluster_cell_ID
+cluster_cell_E
+cluster_fullHitsTruthIndex
+cluster_fullHitsTruthE
+cluster_visibleHitsTruthIndex
+cluster_visibleHitsTruthE
+cluster_cell_hitsTruthIndex
+cluster_cell_hitsTruthE
+
+Geometry Keys:
+cell_geo_ID
+cell_geo_sampling
+cell_geo_eta
+cell_geo_phi
+cell_geo_rPerp
+cell_geo_deta
+cell_geo_dphi
+cell_geo_volume
+cell_geo_sigma
+cell_geo_prevInPhi
+cell_geo_nextInPhi
+cell_geo_prevInEta
+cell_geo_nextInEta
+cell_geo_prevInSamp
+cell_geo_nextInSamp
+cell_geo_prevSubDet
+cell_geo_nextSubDet
+cell_geo_prevSuperCalo
+cell_geo_nextSuperCalo
+
+Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%
+Processing chunk 1 of size 250
+Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 0.0%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 6.7%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 0.0%, Th3: 0.0%, Th4: 0.0%, Th5: 6.7%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 6.7%, Th3: 0.0%, Th4: 0.0%, Th5: 6.7%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 6.7%, Th3: 0.0%, Th4: 0.0%, Th5: 6.7%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 0.0%, Th2: 6.7%, Th3: 0.0%, Th4: 0.0%, Th5: 6.7%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 6.7%, Th2: 6.7%, Th3: 0.0%, Th4: 0.0%, Th5: 6.7%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 6.7%, Th2: 6.7%, Th3: 0.0%, Th4: 0.0%, Th5: 6.7%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 6.7%, Th2: 6.7%, Th3: 0.0%, Th4: 0.0%, Th5: 6.7%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 6.7%, Th2: 6.7%, Th3: 0.0%, Th4: 0.0%, Th5: 6.7%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 6.7%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 0.0%, Th10: 0.0%, Th11: 0.0%, Th12: 0.0%, Th13: 0.0%, Th14: 0.0%, Th15: 0.0%, Th16: 0.0%Th1: 6.7%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 6.7%, Th10: 0.0%, Th11: 6.7%, Th12: 0.0%, Th13: 0.0%, Th14: 6.7%, Th15: 0.0%, Th16: 4.0%Th1: 6.7%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 0.0%, Th8: 0.0%, Th9: 6.7%, Th10: 0.0%, Th11: 6.7%, Th12: 0.0%, Th13: 0.0%, Th14: 6.7%, Th15: 0.0%, Th16: 4.0%Th1: 6.7%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 6.7%, Th8: 0.0%, Th9: 6.7%, Th10: 0.0%, Th11: 6.7%, Th12: 0.0%, Th13: 0.0%, Th14: 6.7%, Th15: 0.0%, Th16: 4.0%Th1: 6.7%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 6.7%, Th8: 0.0%, Th9: 6.7%, Th10: 0.0%, Th11: 6.7%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 6.7%, Th16: 4.0%Th1: 6.7%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 6.7%, Th8: 0.0%, Th9: 6.7%, Th10: 0.0%, Th11: 6.7%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 6.7%, Th16: 4.0%Th1: 6.7%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 6.7%, Th8: 0.0%, Th9: 6.7%, Th10: 0.0%, Th11: 6.7%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 6.7%, Th16: 4.0%Th1: 6.7%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 6.7%, Th8: 6.7%, Th9: 6.7%, Th10: 0.0%, Th11: 6.7%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 6.7%, Th16: 4.0%Th1: 6.7%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 6.7%, Th8: 6.7%, Th9: 6.7%, Th10: 0.0%, Th11: 6.7%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 6.7%, Th16: 4.0%Th1: 6.7%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 6.7%, Th8: 6.7%, Th9: 6.7%, Th10: 0.0%, Th11: 6.7%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 6.7%, Th16: 4.0%Th1: 13.3%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 6.7%, Th8: 6.7%, Th9: 6.7%, Th10: 0.0%, Th11: 13.3%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 6.7%, Th16: 4.0%Th1: 13.3%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 13.3%, Th6: 0.0%, Th7: 6.7%, Th8: 6.7%, Th9: 6.7%, Th10: 0.0%, Th11: 13.3%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 6.7%, Th16: 4.0%Th1: 13.3%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 20.0%, Th6: 0.0%, Th7: 6.7%, Th8: 6.7%, Th9: 6.7%, Th10: 0.0%, Th11: 13.3%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 6.7%, Th16: 4.0%Th1: 13.3%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 20.0%, Th6: 6.7%, Th7: 6.7%, Th8: 6.7%, Th9: 6.7%, Th10: 0.0%, Th11: 13.3%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 6.7%, Th16: 4.0%Th1: 13.3%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 20.0%, Th6: 6.7%, Th7: 6.7%, Th8: 6.7%, Th9: 6.7%, Th10: 0.0%, Th11: 13.3%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 13.3%, Th16: 4.0%Th1: 13.3%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 20.0%, Th6: 6.7%, Th7: 6.7%, Th8: 13.3%, Th9: 6.7%, Th10: 0.0%, Th11: 13.3%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 13.3%, Th16: 4.0%Traceback (most recent call last):
+  File "/home/mjovanovic/Work/PointNet_Segmentation/python_scripts/data_processing/jets/jets_process_root_to_train_data.py", line 180, in <module>
+    processed_data = process_chunk_with_progress(chunk, cell_ID_geo, eta_geo, phi_geo, rPerp_geo, progress_dict)
+  File "/home/mjovanovic/Work/PointNet_Segmentation/python_scripts/data_processing/jets/jets_process_root_to_train_data.py", line 125, in process_chunk_with_progress
+    results = pool.starmap(process_events, args)
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 375, in starmap
+    return self._map_async(func, iterable, starmapstar, chunksize).get()
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 768, in get
+    self.wait(timeout)
+  File "/usr/lib/python3.10/multiprocessing/pool.py", line 765, in wait
+    self._event.wait(timeout)
+  File "/usr/lib/python3.10/threading.py", line 607, in wait
+    signaled = self._cond.wait(timeout)
+  File "/usr/lib/python3.10/threading.py", line 320, in wait
+    waiter.acquire()
+KeyboardInterrupt
+Th1: 13.3%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 20.0%, Th6: 6.7%, Th7: 6.7%, Th8: 13.3%, Th9: 13.3%, Th10: 0.0%, Th11: 13.3%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 13.3%, Th16: 4.0%Th1: 13.3%, Th2: 13.3%, Th3: 0.0%, Th4: 0.0%, Th5: 20.0%, Th6: 6.7%, Th7: 6.7%, Th8: 13.3%, Th9: 13.3%, Th10: 0.0%, Th11: 13.3%, Th12: 6.7%, Th13: 6.7%, Th14: 6.7%, Th15: 13.3%, Th16: 4.0%Exception ignored in: <module 'threading' from '/usr/lib/python3.10/threading.py'>
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/threading.py", line 1567, in _shutdown
+    lock.acquire()
+KeyboardInterrupt: 

@@ -316,10 +316,7 @@ def add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields):
         tracks_sample.field(field_name)
         if field_type == "integer":
             # For integer fields
-            if field_name == "eventID":
-                tracks_sample.integer(event_idx)  # Assuming event_idx is the ID
-            else:
-                tracks_sample.integer(event[field_name][track_idx])
+            tracks_sample.integer(event[field_name][track_idx])
         elif field_type == "real":
             # For real number fields
             if field_name == "trackChiSquared/trackNumberDOF":
