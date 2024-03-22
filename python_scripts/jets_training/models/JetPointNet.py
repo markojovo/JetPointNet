@@ -9,12 +9,6 @@ import tensorflow as tf
 import numpy as np
 
 
-class StreamlineLoggingCallback(tf.keras.callbacks.Callback):
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        training_loss = logs.get('loss')
-        evaluation_loss = logs.get('masked_evaluation_loss')  # Adjust the key if needed
-        print(f"Epoch {epoch + 1}: Training Loss: {training_loss}, Evaluation Loss: {evaluation_loss}")
 
 class CustomMaskingLayer(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
@@ -125,7 +119,7 @@ def masked_training_loss(y_true, y_pred_outputs):
     mask = tf.not_equal(y_true, -1.0)
     mask = tf.cast(mask, tf.float32)
     mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
-    base_loss = tf.keras.losses.mean_squared_error(y_true, y_pred)
+    base_loss = tf.keras.losses.mean_absolute_error(y_true, y_pred)
     masked_loss = base_loss * mask
     return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask)
 

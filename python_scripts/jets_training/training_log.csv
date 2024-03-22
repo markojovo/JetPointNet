@@ -1,0 +1,2 @@
+epoch;loss;masked_evaluation_loss;val_loss;val_masked_evaluation_loss
+0;9.761552810668945;0.18671831488609314;8.73644733428955;0.18318621814250946
