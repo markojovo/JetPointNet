@@ -173,6 +173,7 @@ def build_labels_array(tracks_sample_array, max_sample_length):
 
             label_array = np.full(max_sample_length, -1, dtype=np.float32)
 
+            
             num_focused_track_points = len(track['track_layer_intersections'])
             num_associated_cells = len(track['associated_cells'])
             num_associated_track_points = sum(len(assoc_track['track_layer_intersections']) for assoc_track in track['associated_tracks'])
@@ -180,7 +181,10 @@ def build_labels_array(tracks_sample_array, max_sample_length):
             total_points = num_focused_track_points + num_associated_cells + num_associated_track_points
             total_points = min(total_points, max_sample_length)  # Ensure it doesn't exceed max_sample_length
 
-            label_array[:num_focused_track_points] = 1.0
+            if add_tracks_as_labels == True:
+                label_array[:num_focused_track_points] = 1.0
+            else:
+                label_array[:num_focused_track_points] = -1.0
 
             # Adjust for possible truncation
             end_cell_idx = min(num_focused_track_points + num_associated_cells, max_sample_length)
@@ -189,7 +193,11 @@ def build_labels_array(tracks_sample_array, max_sample_length):
             start_idx = num_focused_track_points + num_associated_cells
             end_idx = start_idx + num_associated_track_points
             end_idx = min(end_idx, max_sample_length)  # Truncate if necessary
-            label_array[start_idx:end_idx] = 0.0
+            
+            if add_tracks_as_labels == True:
+                label_array[start_idx:end_idx] = 0.0
+            else:
+                label_array[start_idx:end_idx] = -1.0
 
             labels_list.append(label_array)
 

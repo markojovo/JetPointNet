@@ -35,11 +35,16 @@ for data_folder in DATA_FOLDERS:
     os.makedirs(npz_data_folder_path, exist_ok=True)  # Ensure the directory exists
     print(f"Processing data for: {data_folder}")
 
-    for i in range(4):
-        print(f"  Working on chunk {i} in {data_folder}...", end="", flush=True)
+    data_folder_path = os.path.join(SAVE_LOC, data_folder)
+    chunk_files = [f for f in os.listdir(data_folder_path) if f.startswith('chunk_') and f.endswith('.parquet')]
+    num_chunks = len(chunk_files)
+
+    for i in range(num_chunks):
+        print(f"  Working on chunk {i} of {num_chunks - 1} in {data_folder}...", end="", flush=True)
         start_time = time.time()
-        # Replace 'read_parquet', 'build_labels_array', and 'build_input_array' with your actual functions
-        ak_array = read_parquet(os.path.join(SAVE_LOC, data_folder, f'chunk_{i}_{data_folder}.parquet'))
+        # Note: The file name is directly obtained from chunk_files list based on the sorted order
+        chunk_file_name = sorted(chunk_files)[i]
+        ak_array = read_parquet(os.path.join(data_folder_path, chunk_file_name))
 
         labels = build_labels_array(ak_array, global_max_sample_length)
         feats = build_input_array(ak_array, global_max_sample_length)
@@ -52,7 +57,5 @@ for data_folder in DATA_FOLDERS:
         print(f"    Chunk processing took: ", end_time - start_time, "seconds")
 
     print(f"Completed processing data for: {data_folder}")
-
-
 
 #ADD STUFF FOR STORING THE METADATA WHEN GENERATING THESE AWKWARD ARRAYS, THEN SAVE IT OR SOMETHINGG FOR MAX SAMPLE LEGNTH? IDK

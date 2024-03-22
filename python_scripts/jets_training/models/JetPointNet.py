@@ -93,10 +93,7 @@ def TNet(input_tensor, num_points, features):
 
 def PointNetRegression(num_points, n_classes):
     input_tensor = tf.keras.Input(shape=(num_points, 6))  # Assuming 6 features, including the one to check for types (-1, 0, 1, 2)
-    
-    # This extracts the type information (last feature) for each point
-    type_info = tf.keras.layers.Lambda(lambda x: x[:, :, 5:])(input_tensor)
-    
+        
     x = CustomMaskingLayer()(input_tensor)
     x_t = TNet(x, num_points, 6)  # Adjust accordingly if your feature count changes
     x = tf.matmul(x, x_t)
@@ -107,7 +104,7 @@ def PointNetRegression(num_points, n_classes):
     x = conv_block(x, 64)
     x = conv_block(x, 128)
     x = conv_block(x, 1024)
-    x = tf.keras.layers.MaxPooling1D(pool_size=num_points)(x)
+    x = tf.keras.layers.MaxPooling1D(pool_size=num_points)(x) # MAYBE MAKE THIS ONLY CELL POINTS
     
     # Classification or regression output
     output_tensor = regression_net(x, n_classes)
@@ -134,14 +131,11 @@ def masked_training_loss(y_true, y_pred_outputs):
 
 def masked_evaluation_loss(y_true, y_pred_outputs):
     # Access elements using TensorFlow operations
-    y_pred = y_pred_outputs[0]  # The first element: output_tensor
-    type_info = y_pred_outputs[1]  # The second element: type_info
+    y_pred = y_pred_outputs
     
-    mask = tf.equal(type_info, 0.0)
+    mask = tf.not_equal(y_true, -1.0)
     mask = tf.cast(mask, tf.float32)
-    
-    y_true_masked = tf.multiply(y_true, mask)
-    y_pred_masked = tf.multiply(y_pred, mask)
-    mae_loss = tf.abs(y_true_masked - y_pred_masked)
-    mae_loss = tf.reduce_sum(mae_loss) / tf.reduce_sum(mask)
-    return mae_loss
+    mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
+    base_loss = tf.keras.losses.mean_absolute_error(y_true, y_pred)
+    masked_loss = base_loss * mask
+    return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask)
