@@ -78,7 +78,7 @@ def process_events(data, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo
 
             # Meta info
             fields = [
-                ("eventNumber", "integer")
+                ("eventNumber", "integer"),
                 ("trackEta_EMB2", "real"),
                 ("trackPhi_EMB2", "real"),
                 ("trackEta_EME2", "real"),
