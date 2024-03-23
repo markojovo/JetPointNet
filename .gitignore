@@ -8,3 +8,7 @@ containers/*
 # ignore pred files
 pi0*
 
+nohup.out
+training_log.csv
+
+__pycache__
