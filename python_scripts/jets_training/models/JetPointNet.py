@@ -38,6 +38,10 @@ class OrthogonalRegularizer(tf.keras.regularizers.Regularizer):
         AAT = tf.tensordot(A, A, axes=(2, 2))
         AAT = tf.reshape(AAT, (-1, self.num_features, self.num_features))
         return tf.reduce_sum(self.l2 * tf.square(AAT - self.I))
+
+    def get_config(self):
+        # Return a dictionary containing the parameters of the regularizer to allow for model serialization
+        return {'num_features': self.num_features, 'l2': self.l2}
     
 
 def regression_net(input_tensor, n_classes):
@@ -112,22 +116,33 @@ def PointNetRegression(num_points, n_classes):
 
 
 
+def masked_kl_divergence_loss(y_true, y_pred):
+    epsilon = tf.constant(1e-7, dtype=tf.float32)  
+    y_pred = tf.clip_by_value(y_pred, epsilon, 1 - epsilon)
+    
+    # Note: This step needs careful consideration to avoid altering true labels outside the mask
+    y_true_clipped = tf.clip_by_value(y_true, epsilon, 1 - epsilon)
+    mask = tf.not_equal(y_true, -1.0)
+    mask = tf.cast(mask, tf.float32)
 
-def masked_training_loss(y_true, y_pred_outputs):
-    # Access elements using TensorFlow operations
-    #y_pred = y_pred_outputs[0]  # The first element: output_tensor
-    #type_info = y_pred_outputs[1]  # The second element: type_info
+    kl_divergences = y_true_clipped * tf.math.log(y_true_clipped / y_pred) + \
+                     (1 - y_true_clipped) * tf.math.log((1 - y_true_clipped) / (1 - y_pred)) 
+      
+    masked_loss = kl_divergences * mask  
+    safe_loss = tf.where(mask > 0, masked_loss, tf.zeros_like(masked_loss))
+    return tf.reduce_sum(safe_loss) / tf.reduce_sum(mask)
+
+def masked_mse_loss(y_true, y_pred_outputs):
     y_pred = y_pred_outputs
     
     mask = tf.not_equal(y_true, -1.0)
     mask = tf.cast(mask, tf.float32)
     mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
-    base_loss = tf.keras.losses.mean_absolute_error(y_true, y_pred)
+    base_loss = tf.keras.losses.mean_squared_error(y_true, y_pred)
     masked_loss = base_loss * mask
     return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask)
 
-def masked_evaluation_loss(y_true, y_pred_outputs):
-    # Access elements using TensorFlow operations
+def masked_mae_loss(y_true, y_pred_outputs):
     y_pred = y_pred_outputs
     
     mask = tf.not_equal(y_true, -1.0)

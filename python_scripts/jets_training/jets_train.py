@@ -9,7 +9,7 @@ import os
 import glob
 import sys
 import time
-from models.JetPointNet import PointNetRegression, masked_training_loss, masked_evaluation_loss, SaveModel
+from models.JetPointNet import PointNetRegression, masked_kl_divergence_loss, masked_mae_loss, masked_mse_loss
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "7" # SET GPU
 
@@ -47,9 +47,9 @@ def calculate_steps(data_dir, batch_size):
     return steps_per_epoch
 
 
-learning_rate = 0.0005  
+learning_rate = 0.0001  
 BATCH_SIZE = 128
-EPOCHS = 35
+EPOCHS = 100
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
 VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'
 
@@ -67,9 +67,8 @@ model = PointNetRegression(MAX_SAMPLE_LENGTH, 1)
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 model.compile(optimizer=optimizer,
-              loss=masked_training_loss,
-              metrics=[masked_evaluation_loss])
-
+              loss=masked_kl_divergence_loss,
+              metrics=[masked_mae_loss])
 
 
 model.summary()
@@ -90,4 +89,5 @@ model.fit(train_generator,
           callbacks=[csv_logger])
 end_time = time.time()
 
+model.save("PointNetModel.keras")
 print(f"Training Done! Took {end_time - start_time / 60 / 60} hours! (Note, did not save...)")
