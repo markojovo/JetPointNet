@@ -2,12 +2,14 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
-from tensorflow.keras.callbacks import CSVLogger
+from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
+import keras
 import math
 import os
 import glob
 import sys
-from models.JetPointNet import PointNetRegression, masked_training_loss, masked_evaluation_loss
+import time
+from models.JetPointNet import PointNetRegression, masked_training_loss, masked_evaluation_loss, SaveModel
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "7" # SET GPU
 
@@ -45,11 +47,11 @@ def calculate_steps(data_dir, batch_size):
     return steps_per_epoch
 
 
-learning_rate = 0.001  
+learning_rate = 0.0005  
 BATCH_SIZE = 128
-EPOCHS = 100
-TRAIN_DIR = '/data/mjovanovic/jets/processed_files/firstAttempts/SavedNpz/train'
-VAL_DIR = '/data/mjovanovic/jets/processed_files/firstAttempts/SavedNpz/val'
+EPOCHS = 35
+TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
+VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'
 
 train_steps = calculate_steps(TRAIN_DIR, BATCH_SIZE)
 val_steps = calculate_steps(VAL_DIR, BATCH_SIZE)
@@ -77,14 +79,15 @@ model_size_in_megabytes = model_size_in_bytes / (1024 ** 2)
 
 print(f"Model Parameters: {model_params}")
 print(f"Model Size: {model_size_in_megabytes:.2f} MB")
-
+print("Training on Dataset: ", TRAIN_DIR)
 csv_logger = CSVLogger('training_log.csv', append=True, separator=';')
+start_time = time.time()
 model.fit(train_generator,
           steps_per_epoch=train_steps,
           epochs=EPOCHS,
           validation_data=val_generator,
           validation_steps=val_steps,
           callbacks=[csv_logger])
+end_time = time.time()
 
-
-print("Done!")
+print(f"Training Done! Took {end_time - start_time / 60 / 60} hours! (Note, did not save...)")

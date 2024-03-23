@@ -7,8 +7,11 @@ https://github.com/lattice-ai/pointnet/tree/master
 
 import tensorflow as tf
 import numpy as np
+import keras 
 
-
+class SaveModel(keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs={}):
+        self.model.save("JetPointNet_{epoch}.hd5".format(epoch))
 
 class CustomMaskingLayer(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
