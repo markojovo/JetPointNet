@@ -1,0 +1,21 @@
+events_root_file: "/data/mjovanovic/cell_particle_deposit_learning/rho/rho_root_files/rho_full.root"
+preprocessed: False
+dataset: "rho"
+file_len: 6000
+starting_event_idx: 0
+num_files_to_process: 1
+save_dir: "/data/mjovanovic/cell_particle_deposit_learning/rho/"
+num_procs: 16
+
+preprocessed_file_name: "rho_full"
+i_low: 0 # 0 # 65 # 74 #76 # 82 # 110 # 130 # 132 # 154 # 164
+i_high: 63 # 64  #72 # 74 # 80 #  108 # 128 # 130 # 134 # 154 # 164
+
+include_delta_p_pi0: False
+include_delta_n_pi0: False
+include_delta_n_pipm: False
+include_delta_p_pipm: False
+
+niche_case: "none" #"1_track_1_n_3_pi0"
+
+regression: True

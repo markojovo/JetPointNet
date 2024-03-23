@@ -1,8 +1,7 @@
 import numpy as np
 import awkward as ak
 import sys
-sys.path.append("/home/mjovanovic/Work/PointNet_Segmentation")
-from utils.track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
+from track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
 HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
 from both import *
 
@@ -125,83 +124,89 @@ def print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT):
 # =======================================================================================================================
 
 def build_input_array(tracks_sample_array, max_sample_length):
-    # Initialize an empty list to hold all samples
     samples = []
 
     for event in tracks_sample_array:
         for track in event:
-            # Check if the track has associated cells or tracks, skip if not
             if len(track['associated_cells']) == 0 and len(track['associated_tracks']) == 0:
                 continue
 
-            # Initialize a list to collect points for this track
             track_points = []
 
-            # Add the focused track's intersection points
             for intersection in track['track_layer_intersections']:
                 track_points.append([intersection['X'], intersection['Y'], intersection['Z'], 0, track['trackPt'], 1])
 
-            # Add associated cells
             for cell in track['associated_cells']:
                 track_points.append([cell['X'], cell['Y'], cell['Z'], cell['distance_to_track'], cell['E'], 0])
 
-            # Add points from associated tracks
             for associated_track in track['associated_tracks']:
                 for intersection in associated_track['track_layer_intersections']:
                     track_points.append([intersection['X'], intersection['Y'], intersection['Z'], intersection['distance_to_track'], associated_track['trackPt'], 2])
 
-            # Check if padding is needed
+            # Now, the sample is truncated to max_sample_length before padding is considered
+            track_points = track_points[:max_sample_length]
+
+            # Pad with zeros and -1 for class identity if needed
             num_points = len(track_points)
             if num_points < max_sample_length:
-                # Pad with zeros and -1 for class identity
                 padding = [[0, 0, 0, 0, 0, -1] for _ in range(max_sample_length - num_points)]
                 track_points.extend(padding)
 
-            # Add to samples list
-            samples.append(track_points[:max_sample_length])  # Ensure the sample does not exceed max_sample_length
+            samples.append(track_points)
 
-    # Convert the list of samples to a NumPy array
     samples_array = np.array(samples, dtype=np.float32)
+
+    # Replace NaN values with 0
+    samples_array = np.nan_to_num(samples_array, nan=0.0)
+
     return samples_array
 
 # =======================================================================================================================
 
 def build_labels_array(tracks_sample_array, max_sample_length):
-    # Initialize an empty list to hold all label arrays
     labels_list = []
 
     for event in tracks_sample_array:
         for track in event:
-            # Check if the track has associated cells or tracks, skip if not
             if len(track['associated_cells']) == 0 and len(track['associated_tracks']) == 0:
                 continue
 
-            # Initialize the label array for this track, filled with -1 (for padding)
             label_array = np.full(max_sample_length, -1, dtype=np.float32)
 
-            # Calculate the total number of points (focused track points, associated cells, associated track points)
+            
             num_focused_track_points = len(track['track_layer_intersections'])
             num_associated_cells = len(track['associated_cells'])
             num_associated_track_points = sum(len(assoc_track['track_layer_intersections']) for assoc_track in track['associated_tracks'])
 
-            # Set labels for focused track points to 1.0
-            label_array[:num_focused_track_points] = 1.0
+            total_points = num_focused_track_points + num_associated_cells + num_associated_track_points
+            total_points = min(total_points, max_sample_length)  # Ensure it doesn't exceed max_sample_length
 
-            # Set labels for associated cells to 0.5
-            label_array[num_focused_track_points:num_focused_track_points+num_associated_cells] = 0.5
+            if add_tracks_as_labels == True:
+                label_array[:num_focused_track_points] = 1.0
+            else:
+                label_array[:num_focused_track_points] = -1.0
 
-            # Set labels for associated track points to 0.0
+            # Adjust for possible truncation
+            end_cell_idx = min(num_focused_track_points + num_associated_cells, max_sample_length)
+            label_array[num_focused_track_points:end_cell_idx] = track['associated_cells']['Label'][:end_cell_idx - num_focused_track_points]
+
             start_idx = num_focused_track_points + num_associated_cells
             end_idx = start_idx + num_associated_track_points
-            label_array[start_idx:end_idx] = 0.0
+            end_idx = min(end_idx, max_sample_length)  # Truncate if necessary
+            
+            if add_tracks_as_labels == True:
+                label_array[start_idx:end_idx] = 0.0
+            else:
+                label_array[start_idx:end_idx] = -1.0
 
-            # Add to labels list
             labels_list.append(label_array)
 
-    # Convert the list of label arrays into a NumPy array
     labels_array = np.array(labels_list, dtype=np.float32)
-    return labels_array
 
+    # Replace NaN values with 0
+    labels_array = np.nan_to_num(labels_array, nan=0.0)
+
+    return labels_array
 # =======================================================================================================================
 # =======================================================================================================================
 
@@ -319,8 +324,8 @@ def add_track_meta_info(tracks_sample, event, event_idx, track_idx, fields):
         tracks_sample.field(field_name)
         if field_type == "integer":
             # For integer fields
-            if field_name == "eventID":
-                tracks_sample.integer(event_idx)  # Assuming event_idx is the ID
+            if field_name == "eventNumber":
+                tracks_sample.integer(event["eventNumber"]) 
             else:
                 tracks_sample.integer(event[field_name][track_idx])
         elif field_type == "real":
