@@ -2,14 +2,14 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
-from tensorflow.keras.callbacks import CSVLogger, ModelCheckpoint
+from tensorflow.keras.callbacks import CSVLogger, LambdaCallback
 import keras
 import math
 import os
 import glob
 import sys
 import time
-from models.JetPointNet import PointNetRegression, masked_training_loss, masked_evaluation_loss, SaveModel
+from models.JetPointNet import PointNetRegression, masked_kl_divergence_loss, masked_mae_loss, masked_mse_loss
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "7" # SET GPU
 
@@ -46,10 +46,13 @@ def calculate_steps(data_dir, batch_size):
     steps_per_epoch = math.ceil(total_samples / batch_size)  # Use math.ceil to round up to ensure covering all samples
     return steps_per_epoch
 
+def save_model_on_epoch_end(epoch, logs):
+    model.save(f"saved_model/PointNetModel.keras")  # epoch+1 because epochs are 0-indexed
 
-learning_rate = 0.0005  
+
+learning_rate = 0.0001  
 BATCH_SIZE = 128
-EPOCHS = 35
+EPOCHS = 100
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
 VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'
 
@@ -67,9 +70,8 @@ model = PointNetRegression(MAX_SAMPLE_LENGTH, 1)
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 model.compile(optimizer=optimizer,
-              loss=masked_training_loss,
-              metrics=[masked_evaluation_loss])
-
+              loss=masked_kl_divergence_loss,
+              metrics=[masked_mae_loss])
 
 
 model.summary()
@@ -80,14 +82,17 @@ model_size_in_megabytes = model_size_in_bytes / (1024 ** 2)
 print(f"Model Parameters: {model_params}")
 print(f"Model Size: {model_size_in_megabytes:.2f} MB")
 print("Training on Dataset: ", TRAIN_DIR)
-csv_logger = CSVLogger('training_log.csv', append=True, separator=';')
+csv_logger = CSVLogger('saved_model/training_log.csv', append=True, separator=';')
+save_model_callback = LambdaCallback(on_epoch_end=save_model_on_epoch_end)
+
 start_time = time.time()
 model.fit(train_generator,
           steps_per_epoch=train_steps,
           epochs=EPOCHS,
           validation_data=val_generator,
           validation_steps=val_steps,
-          callbacks=[csv_logger])
+          callbacks=[csv_logger, save_model_callback])
 end_time = time.time()
 
-print(f"Training Done! Took {end_time - start_time / 60 / 60} hours! (Note, did not save...)")
+model.save("PointNetModel.keras")
+print(f"Training Done! Took {(end_time - start_time) / 60 / 60} hours!")
