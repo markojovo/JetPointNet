@@ -28,7 +28,7 @@ class CustomMaskingLayer(tf.keras.layers.Layer):
 
 class OrthogonalRegularizer(tf.keras.regularizers.Regularizer):
     
-    def __init__(self, num_features, l2=0.001):
+    def __init__(self, num_features=6, l2=0.001):
         self.num_features = num_features
         self.l2 = l2
         self.I = tf.eye(num_features)
@@ -75,7 +75,7 @@ class CustomBiasInitializer(tf.keras.initializers.Initializer):
 
     def get_config(self):  # For saving and loading the model
         return {'features': self.features}
-
+        
 def TNet(input_tensor, num_points, features):
     x = conv_block(input_tensor, 64)
     x = conv_block(x, 128)
@@ -92,11 +92,23 @@ def TNet(input_tensor, num_points, features):
     x = tf.reshape(x, (-1, features, features))
     return x
 
+def point_segmentation_net(input_tensor, n_classes):
+    # This block is used for per-point predictions.
+    # Use a few more convolutional layers to refine the features per point.
+    x = conv_block(input_tensor, 256)
+    x = tf.keras.layers.Dropout(0.3)(x)
+    x = conv_block(x, 128)
+    x = tf.keras.layers.Dropout(0.3)(x)
+    # The final layer should predict n_classes for each point.
+    return tf.keras.layers.Conv1D(
+        n_classes, kernel_size=1, activation="sigmoid"  # Use softmax for classification; adjust if doing regression.
+    )(x)
+
 def PointNetRegression(num_points, n_classes):
     input_tensor = tf.keras.Input(shape=(num_points, 6))  # Assuming 6 features, including the one to check for types (-1, 0, 1, 2)
-        
+    
     x = CustomMaskingLayer()(input_tensor)
-    x_t = TNet(x, num_points, 6)  # Adjust accordingly if your feature count changes
+    x_t = TNet(x, num_points, 6)
     x = tf.matmul(x, x_t)
     x = conv_block(x, 64)
     x = conv_block(x, 64)
@@ -105,13 +117,10 @@ def PointNetRegression(num_points, n_classes):
     x = conv_block(x, 64)
     x = conv_block(x, 128)
     x = conv_block(x, 1024)
-    x = tf.keras.layers.MaxPooling1D(pool_size=num_points)(x) # MAYBE MAKE THIS ONLY CELL POINTS
+
+    # For segmentation, we don't use MaxPooling across all points. Instead, we proceed to per-point prediction.
+    output_tensor = point_segmentation_net(x, n_classes)
     
-    # Classification or regression output
-    output_tensor = regression_net(x, n_classes)
-    
-    # Construct the model with two outputs: the main output and the pass-through type information
-    #return tf.keras.Model(inputs=input_tensor, outputs=[output_tensor, type_info])
     return tf.keras.Model(inputs=input_tensor, outputs=output_tensor)
 
 
