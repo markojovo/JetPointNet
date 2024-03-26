@@ -12,6 +12,8 @@ import tensorflow as tf
 import numpy as np
 import keras 
 
+
+
 class SaveModel(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs={}):
         self.model.save("JetPointNet_{epoch}.hd5".format(epoch))
@@ -46,10 +48,14 @@ class OrthogonalRegularizer(tf.keras.regularizers.Regularizer):
         return {'num_features': self.num_features, 'l2': self.l2}
     
 
-def conv_mlp(input_tensor, filters):
+def conv_mlp(input_tensor, filters, dropout_rate = None):
     # Apply shared MLPs which are equivalent to 1D convolutions with kernel size 1
     x = tf.keras.layers.Conv1D(filters=filters, kernel_size=1, activation='relu')(input_tensor)
     x = tf.keras.layers.BatchNormalization(momentum=0.0)(x)
+    if dropout_rate is not None:
+        x = tf.keras.layers.Dropout(dropout_rate)(x)
+    return x
+
     return x
 
 def dense_block(input_tensor, units, dropout_rate=None, regularizer=None):
@@ -96,7 +102,7 @@ def PointNetSegmentation(num_points, num_classes):
     c = tf.keras.layers.Concatenate()([point_features, global_feature_expanded])
     c = conv_mlp(c, 512)
     c = conv_mlp(c, 256)
-    c = conv_mlp(c, 128)
+    c = conv_mlp(c, 128, dropout_rate=0.3)
     segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation="sigmoid")(c)
     model = tf.keras.Model(inputs=input_points, outputs=segmentation_output)
     

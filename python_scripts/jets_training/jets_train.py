@@ -17,6 +17,21 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "5" # SET GPU
 
 MAX_SAMPLE_LENGTH=859
 
+class BatchNormalizationMomentumScheduler(tf.keras.callbacks.Callback):
+    def __init__(self, initial_momentum=0.5, final_momentum=0.99, total_epochs=120):
+        self.initial_momentum = initial_momentum
+        self.final_momentum = final_momentum
+        self.total_epochs = total_epochs
+        self.delta = (final_momentum - initial_momentum) / total_epochs
+
+    def on_epoch_end(self, epoch, logs=None):
+        new_momentum = self.initial_momentum + self.delta * epoch
+        new_momentum = min(new_momentum, self.final_momentum)
+        for layer in self.model.layers:
+            if isinstance(layer, tf.keras.layers.BatchNormalization):
+                layer.momentum = new_momentum
+        print(f"\nUpdated BatchNormalization momentum to: {new_momentum:.4f}")
+
 def load_data_from_npz(npz_file):
     data = np.load(npz_file)
     feats = data['feats']  # Shape: (num_samples, 859, 6)
@@ -50,7 +65,7 @@ def save_model_on_epoch_end(epoch, logs):
     model.save(f"saved_model/PointNetModel.keras") 
 
 def scheduler(epoch, lr):
-    if epoch > 0 and epoch % 20 == 0:
+    if epoch > 0 and epoch % 10 == 0:
         return lr * 0.5
     else:
         return lr
@@ -83,12 +98,13 @@ print(f"Model Parameters: {model_params}")
 print(f"Model Size: {model_size_in_megabytes:.2f} MB")
 print("Training on Dataset: ", TRAIN_DIR)
 
-# Learning rate scheduler callback
-lr_scheduler = tf.keras.callbacks.LearningRateScheduler(scheduler)
+
 
 # Define your callbacks
+lr_scheduler = tf.keras.callbacks.LearningRateScheduler(scheduler)
 csv_logger = CSVLogger('saved_model/training_log.csv', append=True, separator=';')
 save_model_callback = LambdaCallback(on_epoch_end=save_model_on_epoch_end)
+batch_norm_scheduler = BatchNormalizationMomentumScheduler(total_epochs=EPOCHS)
 
 start_time = time.time()
 model.fit(train_generator,
@@ -96,7 +112,7 @@ model.fit(train_generator,
           epochs=EPOCHS,
           validation_data=val_generator,
           validation_steps=val_steps,
-          callbacks=[csv_logger, save_model_callback, lr_scheduler])  # Include lr_scheduler in callbacks
+          callbacks=[csv_logger, save_model_callback, lr_scheduler, batch_norm_scheduler])  # Include lr_scheduler in callbacks
 end_time = time.time()
 
 print(f"Training Done! Took {(end_time - start_time) / 60 / 60} hours!")
