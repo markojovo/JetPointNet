@@ -9,7 +9,7 @@ import os
 import glob
 import sys
 import time
-from models.JetPointNet import PointNetRegression, masked_kl_divergence_loss, masked_mae_loss, masked_mse_loss
+from models.JetPointNet import PointNetRegression, masked_bce_loss, masked_mae_loss, masked_mse_loss
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "7" # SET GPU
 
@@ -50,7 +50,7 @@ def save_model_on_epoch_end(epoch, logs):
     model.save(f"saved_model/PointNetModel.keras")  # epoch+1 because epochs are 0-indexed
 
 
-learning_rate = 0.0001  
+learning_rate = 0.00001 #0.0001  
 BATCH_SIZE = 128
 EPOCHS = 100
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
@@ -70,7 +70,7 @@ model = PointNetRegression(MAX_SAMPLE_LENGTH, 1)
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 model.compile(optimizer=optimizer,
-              loss=masked_kl_divergence_loss,
+              loss=masked_bce_loss, #masked_kl_divergence_loss,
               metrics=[masked_mae_loss])
 
 

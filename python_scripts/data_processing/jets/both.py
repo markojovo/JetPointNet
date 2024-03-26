@@ -20,7 +20,6 @@ MAX_DISTANCE = 0.2
 # Path to the ROOT file containing jet events
 #FILE_LOC = "/data/atlas/mltree_1000.root"
 FILE_LOC = "/data/atlas/mltree_2000_fixedHits.root"
-
 GEO_FILE_LOC = "/data/atlas/data/rho_delta/rho_small.root"
 
 

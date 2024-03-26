@@ -125,6 +125,9 @@ def PointNetRegression(num_points, n_classes):
 
 
 
+'''
+#TODO: Get rid of this (bce loss does the same)
+
 def masked_kl_divergence_loss(y_true, y_pred):
     epsilon = tf.constant(1e-7, dtype=tf.float32)  
     y_pred = tf.clip_by_value(y_pred, epsilon, 1 - epsilon)
@@ -140,6 +143,17 @@ def masked_kl_divergence_loss(y_true, y_pred):
     masked_loss = kl_divergences * mask  
     safe_loss = tf.where(mask > 0, masked_loss, tf.zeros_like(masked_loss))
     return tf.reduce_sum(safe_loss) / tf.reduce_sum(mask)
+'''
+
+def masked_bce_loss(y_true, y_pred_outputs):
+    y_pred = y_pred_outputs
+    
+    mask = tf.not_equal(y_true, -1.0)
+    mask = tf.cast(mask, tf.float32)
+    mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
+    base_loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=False) 
+    masked_loss = base_loss * mask
+    return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask)
 
 def masked_mse_loss(y_true, y_pred_outputs):
     y_pred = y_pred_outputs
