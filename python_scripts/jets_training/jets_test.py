@@ -4,7 +4,7 @@ from tensorflow import keras
 import glob
 import os
 
-from models.JetPointNet import PointNetRegression
+from models.JetPointNet import PointNetSegmentation
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "" # SET GPU
 
@@ -15,7 +15,7 @@ def load_data_from_npz(npz_file):
     return feats, labels
 
 
-model = PointNetRegression(num_points=859, n_classes=1) 
+model = PointNetSegmentation(num_points=859, num_classes=1) 
 model.load_weights("saved_model/PointNetModel.keras") 
 TEST_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/test'
 all_labels = []

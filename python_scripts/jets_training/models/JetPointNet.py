@@ -1,7 +1,10 @@
 
 '''
-From
+Adapted From
 https://github.com/lattice-ai/pointnet/tree/master
+
+Original Architecture From
+https://arxiv.org/pdf/1612.00593.pdf
 '''
 
 
@@ -27,7 +30,6 @@ class CustomMaskingLayer(tf.keras.layers.Layer):
         return input_shape
 
 class OrthogonalRegularizer(tf.keras.regularizers.Regularizer):
-    
     def __init__(self, num_features=6, l2=0.001):
         self.num_features = num_features
         self.l2 = l2
@@ -58,13 +60,6 @@ def dense_block(input_tensor, units, dropout_rate=None, regularizer=None):
         x = tf.keras.layers.Dropout(dropout_rate)(x)
     return x
 
-
-def classification_head(global_feature, n_classes):
-    x = dense_block(global_feature, 512, dropout_rate=0.3)
-    x = dense_block(x, 256, dropout_rate=0.3)
-    return tf.keras.layers.Dense(n_classes, activation="softmax")(x)
-
-
 def TNet(input_tensor, size, add_regularization=False):
     # size is either 6 for the first TNet or 64 for the second
     x = conv_mlp(input_tensor, 64)
@@ -85,45 +80,24 @@ def TNet(input_tensor, size, add_regularization=False):
 def PointNetSegmentation(num_points, num_classes):
     num_features = 6  # Adjust based on your input features
     input_points = tf.keras.Input(shape=(num_points, num_features))
-
-    # Input Transformation Net
     input_tnet = TNet(input_points, num_features)
     x = tf.keras.layers.Dot(axes=(2, 1))([input_points, input_tnet])
-    
-    # First few shared MLPs / Conv layers
     x = conv_mlp(x, 64)
     x = conv_mlp(x, 64)
-    
-    # Save local features from the intermediate layer for segmentation
     point_features = x
-    
-    # Feature Transformation Net
     feature_tnet = TNet(x, 64, add_regularization=True)
     x = tf.keras.layers.Dot(axes=(2, 1))([x, feature_tnet])
-    
-    # Additional shared MLPs / Conv layers
     x = conv_mlp(x, 64)
     x = conv_mlp(x, 128)
     x = conv_mlp(x, 1024)
-    
-    # Global Feature Vector
     global_feature = tf.keras.layers.GlobalMaxPooling1D()(x)
-    # Expand the global feature to be concatenated with local point features
     global_feature_expanded = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, 1))(global_feature)
-    global_feature_expanded = tf.keras.layers.Tile((1, num_points))(global_feature_expanded)
-    
-    # Concatenate global and local features for each point
+    global_feature_expanded = tf.keras.layers.Lambda(lambda x: tf.tile(x, [1, num_points, 1]))(global_feature_expanded)
     c = tf.keras.layers.Concatenate()([point_features, global_feature_expanded])
-    
-    # Shared MLPs for segmentation (Can add more layers or change the sizes as needed)
     c = conv_mlp(c, 512)
     c = conv_mlp(c, 256)
     c = conv_mlp(c, 128)
-    
-    # Final layer to output per-point scores for each class
     segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation="sigmoid")(c)
-    
-    # Create the model
     model = tf.keras.Model(inputs=input_points, outputs=segmentation_output)
     
     return model
