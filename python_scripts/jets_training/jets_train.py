@@ -94,5 +94,5 @@ model.fit(train_generator,
           callbacks=[csv_logger, save_model_callback])
 end_time = time.time()
 
-model.save("PointNetModel.keras")
+
 print(f"Training Done! Took {(end_time - start_time) / 60 / 60} hours!")

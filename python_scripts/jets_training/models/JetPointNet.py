@@ -18,7 +18,7 @@ class CustomMaskingLayer(tf.keras.layers.Layer):
         super(CustomMaskingLayer, self).__init__(**kwargs)
     
     def call(self, inputs):
-        mask = tf.not_equal(inputs[:, :, 5], -1)
+        mask = tf.not_equal(inputs[:, :, -1], -1)
         mask = tf.cast(mask, tf.float32)
         mask = tf.expand_dims(mask, -1)
         return inputs * mask
@@ -44,106 +44,90 @@ class OrthogonalRegularizer(tf.keras.regularizers.Regularizer):
         return {'num_features': self.num_features, 'l2': self.l2}
     
 
-def regression_net(input_tensor, n_classes):
-    x = dense_block(input_tensor, 512)
-    x = tf.keras.layers.Dropout(0.3)(x)
-    x = dense_block(x, 256)
-    x = tf.keras.layers.Dropout(0.3)(x)
-    return tf.keras.layers.Dense(
-        n_classes, activation="sigmoid"
-    )(x)
-
-def conv_block(input_tensor, filters):
-    x = tf.keras.layers.Conv1D(filters, kernel_size=1)(input_tensor)
-    x = tf.keras.layers.BatchNormalization()(x)
-    return tf.keras.layers.ReLU()(x)
-
-
-def dense_block(input_tensor, units):
-    x = tf.keras.layers.Dense(units)(input_tensor)
-    x = tf.keras.layers.BatchNormalization()(x)
-    return tf.keras.layers.ReLU()(x)
-
-
-class CustomBiasInitializer(tf.keras.initializers.Initializer):
-    def __init__(self, features):
-        self.features = features
-
-    def __call__(self, shape, dtype=None):
-        assert shape[0] == self.features * self.features
-        return tf.reshape(tf.cast(tf.eye(self.features), dtype=tf.float32), [-1])
-
-    def get_config(self):  # For saving and loading the model
-        return {'features': self.features}
-        
-def TNet(input_tensor, num_points, features):
-    x = conv_block(input_tensor, 64)
-    x = conv_block(x, 128)
-    x = conv_block(x, 1024)
-    x = tf.keras.layers.MaxPooling1D(pool_size=num_points)(x)
-    x = dense_block(x, 512)
-    x = dense_block(x, 256)
-    x = tf.keras.layers.Dense(
-        features * features,
-        kernel_initializer="zeros",
-        bias_initializer=CustomBiasInitializer(features),
-        activity_regularizer=OrthogonalRegularizer(features)
-    )(x)
-    x = tf.reshape(x, (-1, features, features))
+def conv_mlp(input_tensor, filters):
+    # Apply shared MLPs which are equivalent to 1D convolutions with kernel size 1
+    x = tf.keras.layers.Conv1D(filters=filters, kernel_size=1, activation='relu')(input_tensor)
+    x = tf.keras.layers.BatchNormalization(momentum=0.0)(x)
     return x
 
-def point_segmentation_net(input_tensor, n_classes):
-    # This block is used for per-point predictions.
-    # Use a few more convolutional layers to refine the features per point.
-    x = conv_block(input_tensor, 256)
-    x = tf.keras.layers.Dropout(0.3)(x)
-    x = conv_block(x, 128)
-    x = tf.keras.layers.Dropout(0.3)(x)
-    # The final layer should predict n_classes for each point.
-    return tf.keras.layers.Conv1D(
-        n_classes, kernel_size=1, activation="sigmoid"  # Use softmax for classification; adjust if doing regression.
-    )(x)
+def dense_block(input_tensor, units, dropout_rate=None, regularizer=None):
+    x = tf.keras.layers.Dense(units, kernel_regularizer=regularizer)(input_tensor)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.Activation("relu")(x)
+    if dropout_rate is not None:
+        x = tf.keras.layers.Dropout(dropout_rate)(x)
+    return x
 
-def PointNetRegression(num_points, n_classes):
-    input_tensor = tf.keras.Input(shape=(num_points, 6))  # Assuming 6 features, including the one to check for types (-1, 0, 1, 2)
+
+def classification_head(global_feature, n_classes):
+    x = dense_block(global_feature, 512, dropout_rate=0.3)
+    x = dense_block(x, 256, dropout_rate=0.3)
+    return tf.keras.layers.Dense(n_classes, activation="softmax")(x)
+
+
+def TNet(input_tensor, size, add_regularization=False):
+    # size is either 6 for the first TNet or 64 for the second
+    x = conv_mlp(input_tensor, 64)
+    x = conv_mlp(x, 128)
+    x = conv_mlp(x, 1024)
+    x = tf.keras.layers.GlobalMaxPooling1D()(x)
+    x = dense_block(x, 512)
+    x = dense_block(x, 256)
+    if add_regularization:
+        reg = OrthogonalRegularizer(size)
+    else:
+        reg = None
+    x = dense_block(x, size * size, regularizer=reg)
+    x = tf.reshape(x, (-1, size, size))
+    return x        
+
+
+def PointNetSegmentation(num_points, num_classes):
+    num_features = 6  # Adjust based on your input features
+    input_points = tf.keras.Input(shape=(num_points, num_features))
+
+    # Input Transformation Net
+    input_tnet = TNet(input_points, num_features)
+    x = tf.keras.layers.Dot(axes=(2, 1))([input_points, input_tnet])
     
-    x = CustomMaskingLayer()(input_tensor)
-    x_t = TNet(x, num_points, 6)
-    x = tf.matmul(x, x_t)
-    x = conv_block(x, 64)
-    x = conv_block(x, 64)
-    x_t = TNet(x, num_points, 64)
-    x = tf.matmul(x, x_t)
-    x = conv_block(x, 64)
-    x = conv_block(x, 128)
-    x = conv_block(x, 1024)
-
-    # For segmentation, we don't use MaxPooling across all points. Instead, we proceed to per-point prediction.
-    output_tensor = point_segmentation_net(x, n_classes)
+    # First few shared MLPs / Conv layers
+    x = conv_mlp(x, 64)
+    x = conv_mlp(x, 64)
     
-    return tf.keras.Model(inputs=input_tensor, outputs=output_tensor)
-
-
-
-'''
-#TODO: Get rid of this (bce loss does the same)
-
-def masked_kl_divergence_loss(y_true, y_pred):
-    epsilon = tf.constant(1e-7, dtype=tf.float32)  
-    y_pred = tf.clip_by_value(y_pred, epsilon, 1 - epsilon)
+    # Save local features from the intermediate layer for segmentation
+    point_features = x
     
-    # Note: This step needs careful consideration to avoid altering true labels outside the mask
-    y_true_clipped = tf.clip_by_value(y_true, epsilon, 1 - epsilon)
-    mask = tf.not_equal(y_true, -1.0)
-    mask = tf.cast(mask, tf.float32)
+    # Feature Transformation Net
+    feature_tnet = TNet(x, 64, add_regularization=True)
+    x = tf.keras.layers.Dot(axes=(2, 1))([x, feature_tnet])
+    
+    # Additional shared MLPs / Conv layers
+    x = conv_mlp(x, 64)
+    x = conv_mlp(x, 128)
+    x = conv_mlp(x, 1024)
+    
+    # Global Feature Vector
+    global_feature = tf.keras.layers.GlobalMaxPooling1D()(x)
+    # Expand the global feature to be concatenated with local point features
+    global_feature_expanded = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, 1))(global_feature)
+    global_feature_expanded = tf.keras.layers.Tile((1, num_points))(global_feature_expanded)
+    
+    # Concatenate global and local features for each point
+    c = tf.keras.layers.Concatenate()([point_features, global_feature_expanded])
+    
+    # Shared MLPs for segmentation (Can add more layers or change the sizes as needed)
+    c = conv_mlp(c, 512)
+    c = conv_mlp(c, 256)
+    c = conv_mlp(c, 128)
+    
+    # Final layer to output per-point scores for each class
+    segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation="sigmoid")(c)
+    
+    # Create the model
+    model = tf.keras.Model(inputs=input_points, outputs=segmentation_output)
+    
+    return model
 
-    kl_divergences = y_true_clipped * tf.math.log(y_true_clipped / y_pred) + \
-                     (1 - y_true_clipped) * tf.math.log((1 - y_true_clipped) / (1 - y_pred)) 
-      
-    masked_loss = kl_divergences * mask  
-    safe_loss = tf.where(mask > 0, masked_loss, tf.zeros_like(masked_loss))
-    return tf.reduce_sum(safe_loss) / tf.reduce_sum(mask)
-'''
 
 def masked_bce_loss(y_true, y_pred_outputs):
     y_pred = y_pred_outputs
