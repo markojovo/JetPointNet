@@ -90,7 +90,10 @@ def PointNetSegmentation(num_points, num_classes, training=False):
 
     # Separate features and targets from the combined input tensor
     input_points = Lambda(lambda x: x[:, :, :num_features])(combined_input)  # Features
-    targets = Lambda(lambda x: tf.expand_dims(x[:, :, -1], axis=-1))(combined_input)  # Targets with expanded dimension
+    targets = Lambda(lambda x: x[:, :, -1])(combined_input)  # This assumes the targets have shape (batch_size, num_points)
+
+    energy_weights = Lambda(lambda x: x[:, :, 4])(input_points)  # since it goes x, y, z, dist_to_track, E, type
+    targets = Lambda(lambda x: tf.expand_dims(x, -1))(targets)
 
     # Proceed with the original architecture using separated features
     input_tnet = TNet(input_points, num_features)  # Adjust num_features
@@ -114,16 +117,28 @@ def PointNetSegmentation(num_points, num_classes, training=False):
 
 
     if training:
-        def input_energy_weighted_loss(y_true, y_pred):
-            # Ensure y_true and y_pred have compatible shapes for binary_crossentropy
-            weights = tf.cast(y_true[:, :, 0] != -1.0, tf.float32)  # Use targets to define mask; adjust if using different weighting
+        def input_energy_weighted_loss(energy_weights, y_true, y_pred):
+            # y_true should have the shape (batch_size, num_points, 1), but it has an extra dimension for some reason.
+            # We need to remove any singleton dimensions to ensure it matches y_pred's shape.
+            y_true = tf.squeeze(y_true, axis=-1)  # This removes the last singleton dimension if it's size 1.
+
+            # Next, ensure the mask is applied correctly
+            mask = tf.cast(tf.not_equal(y_true, -1.0), tf.float32)  # define as zero for where targets are -1, and 1 otherwise
+            
+            # Calculate binary cross-entropy loss
             bce_loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=False)
-            weighted_loss = bce_loss * weights
+            
+            # Apply energy weights and mask to the loss
+            weighted_loss = bce_loss * energy_weights * mask
+            
+            # Return the mean of the weighted loss
             return tf.reduce_mean(weighted_loss)
 
+
         model = Model(inputs=combined_input, outputs=segmentation_output)
+        
         # It's crucial that 'targets' passed to input_energy_weighted_loss matches the shape of 'segmentation_output'
-        model.add_loss(input_energy_weighted_loss(targets, segmentation_output))
+        model.add_loss(input_energy_weighted_loss(energy_weights, targets, segmentation_output))
     else:
         model = Model(inputs=combined_input, outputs=segmentation_output)
 

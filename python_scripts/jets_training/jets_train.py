@@ -75,14 +75,14 @@ def save_model_on_epoch_end(epoch, logs):
     model.save(f"saved_model/PointNetModel.keras") 
 
 def scheduler(epoch, lr):
-    if epoch > 0 and epoch % 10 == 0: 
+    if epoch > 0 and epoch % 2 == 0: 
         return lr * 0.5
     else:
         return lr
 
-initial_learning_rate =  0.01
+initial_learning_rate =  0.1
 BATCH_SIZE = 128
-EPOCHS = 120
+EPOCHS = 40
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
 VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'
 
