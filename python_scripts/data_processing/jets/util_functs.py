@@ -128,7 +128,7 @@ def build_input_array(tracks_sample_array, max_sample_length):
 
     for event in tracks_sample_array:
         for track in event:
-            if len(track['associated_cells']) == 0 and len(track['associated_tracks']) == 0:
+            if len(track['associated_cells']) < 100:
                 continue
 
             track_points = []
@@ -168,7 +168,7 @@ def build_labels_array(tracks_sample_array, max_sample_length):
 
     for event in tracks_sample_array:
         for track in event:
-            if len(track['associated_cells']) == 0 and len(track['associated_tracks']) == 0:
+            if len(track['associated_cells']) < 100:
                 continue
 
             label_array = np.full(max_sample_length, -1, dtype=np.float32)

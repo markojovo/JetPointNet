@@ -9,9 +9,9 @@ import os
 import glob
 import sys
 import time
-from models.JetPointNet import PointNetSegmentation, masked_bce_loss, masked_mae_loss, masked_mse_loss
+from models.JetPointNet import PointNetSegmentation, masked_overall_accuracy
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "5" # SET GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = "2" # SET GPU
 
 
 
@@ -42,15 +42,25 @@ def data_generator(data_dir, batch_size):
     npz_files = glob.glob(os.path.join(data_dir, '*.npz'))
     while True:
         for npz_file in npz_files:
-            feats, labels = load_data_from_npz(npz_file)
+            data = np.load(npz_file)
+            feats = data['feats']  # Assuming feats shape is (dataset_size, num_points, num_features)
+            labels = data['labels']  # Assuming labels shape is (dataset_size, num_points)
             dataset_size = feats.shape[0]
+
             for i in range(0, dataset_size, batch_size):
                 end_index = i + batch_size
-                # Ensure we don't exceed the number of samples by slicing till the end
                 batch_feats = feats[i:end_index]
                 batch_labels = labels[i:end_index]
-                yield batch_feats, batch_labels.reshape(*batch_labels.shape, 1)  # Reshape labels to (batch_size, 859, 1)
 
+                batch_feats_tensor = tf.convert_to_tensor(batch_feats, dtype=tf.float32)
+                batch_labels_tensor = tf.convert_to_tensor(batch_labels, dtype=tf.float32)
+
+                batch_labels_tensor = tf.expand_dims(batch_labels_tensor, axis=-1)
+                combined_tensor = tf.concat([batch_feats_tensor, batch_labels_tensor], axis=-1)
+
+                #dummy_targets = tf.zeros((batch_feats.shape[0], 1))  # Minimal memory usage
+
+                yield combined_tensor, batch_labels_tensor
 
 def calculate_steps(data_dir, batch_size):
     total_samples = 0
@@ -65,12 +75,12 @@ def save_model_on_epoch_end(epoch, logs):
     model.save(f"saved_model/PointNetModel.keras") 
 
 def scheduler(epoch, lr):
-    if epoch > 0 and epoch % 10 == 0:
+    if epoch > 0 and epoch % 10 == 0: 
         return lr * 0.5
     else:
         return lr
 
-initial_learning_rate = 0.001
+initial_learning_rate =  0.01
 BATCH_SIZE = 128
 EPOCHS = 120
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
@@ -81,13 +91,13 @@ val_steps = calculate_steps(VAL_DIR, BATCH_SIZE)
 train_generator = data_generator(TRAIN_DIR, BATCH_SIZE)
 val_generator = data_generator(VAL_DIR, BATCH_SIZE)
 
-model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1)
+model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1, training=True)
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
 
-model.compile(optimizer=optimizer,
-              loss=masked_bce_loss,
-              metrics=[masked_mae_loss])
+# Compile the model with loss=None due to custom loss within the model
+model.compile(optimizer=optimizer, metrics=[masked_overall_accuracy])  # Consider updating or customizing metrics as necessary
+
 
 model.summary()
 model_params = model.count_params()
