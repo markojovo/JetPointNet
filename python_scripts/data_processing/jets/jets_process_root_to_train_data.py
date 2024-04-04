@@ -35,6 +35,7 @@ def split_and_save_to_disk(processed_data, base_filename):
     test_dir = os.path.join(SAVE_LOC, 'test')
     
     # Ensure directories exist
+    os.makedirs(SAVE_LOC, exist_ok=True)
     os.makedirs(train_dir, exist_ok=True)
     os.makedirs(val_dir, exist_ok=True)
     os.makedirs(test_dir, exist_ok=True)

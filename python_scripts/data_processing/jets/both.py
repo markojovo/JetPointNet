@@ -9,7 +9,7 @@ TRAIN_SPLIT_RATIO = 0.8
 VAL_SPLIT_RATIO = 0.1
 # TEST_SPLIT_RATIO is implied to be the remaining percentage
 NUM_THREAD_PER_CHUNK = 10
-OUTPUT_DIRECTORY_NAME = "2000_events_w_fixed_hits/"
+OUTPUT_DIRECTORY_NAME = "2000_events_w_fixed_hits_ABSOLUTE_ENERGY_LABEL/"
 # ============================
 
 

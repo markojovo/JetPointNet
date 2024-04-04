@@ -13,6 +13,12 @@ def read_parquet(filename):
     ak_array = ak.from_arrow(table)
     return ak_array
 
+# Make sure this happens after SAVE_LOC is defined and created if necessary
+for folder in DATA_FOLDERS:
+    folder_path = os.path.join(SAVE_LOC, folder)
+    os.makedirs(folder_path, exist_ok=True)  # This line ensures the SAVE_LOC directories exist
+
+
 def find_global_max_sample_length():
     global_max_sample_length = 0
     for folder in DATA_FOLDERS:
@@ -27,6 +33,7 @@ def find_global_max_sample_length():
     print(f"Global Max Sample Length: {global_max_sample_length}")
     return global_max_sample_length
 
+find_global_max_sample_length()
 global_max_sample_length = 859 #placeholder for now 
 
 

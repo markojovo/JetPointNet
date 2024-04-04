@@ -441,7 +441,7 @@ def process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx
             found_index = np.where(cell_part_IDs == track_part_Idx)[0][0]  # Locate index of track_part_Idx in cell_part_IDs
             part_energy = filtered_cell_truths[cell_idx]["cell_hitsTruthEs"][found_index]  # Retrieve corresponding energy deposit
             total_energy = np.sum(filtered_cell_truths[cell_idx]["cell_hitsTruthEs"])  # Sum of all particle energy deposits in the cell
-            energy_fraction = part_energy / total_energy  # Calculate energy fraction
+            energy_fraction = part_energy # / total_energy  # Calculate energy fraction
             tracks_sample.field("Label").real(energy_fraction)
         else:
             tracks_sample.field("Label").real(0)
