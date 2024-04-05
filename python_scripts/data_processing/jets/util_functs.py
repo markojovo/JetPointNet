@@ -128,7 +128,7 @@ def build_input_array(tracks_sample_array, max_sample_length):
 
     for event in tracks_sample_array:
         for track in event:
-            if len(track['associated_cells']) == 0 and len(track['associated_tracks']) == 0:
+            if len(track['associated_cells']) < 100:
                 continue
 
             track_points = []
@@ -163,12 +163,12 @@ def build_input_array(tracks_sample_array, max_sample_length):
 
 # =======================================================================================================================
 
-def build_labels_array(tracks_sample_array, max_sample_length):
+def build_labels_array(tracks_sample_array, max_sample_length, label_string):
     labels_list = []
 
     for event in tracks_sample_array:
         for track in event:
-            if len(track['associated_cells']) == 0 and len(track['associated_tracks']) == 0:
+            if len(track['associated_cells']) < 100:
                 continue
 
             label_array = np.full(max_sample_length, -1, dtype=np.float32)
@@ -188,7 +188,7 @@ def build_labels_array(tracks_sample_array, max_sample_length):
 
             # Adjust for possible truncation
             end_cell_idx = min(num_focused_track_points + num_associated_cells, max_sample_length)
-            label_array[num_focused_track_points:end_cell_idx] = track['associated_cells']['Label'][:end_cell_idx - num_focused_track_points]
+            label_array[num_focused_track_points:end_cell_idx] = track['associated_cells'][label_string][:end_cell_idx - num_focused_track_points]
 
             start_idx = num_focused_track_points + num_associated_cells
             end_idx = start_idx + num_associated_track_points
@@ -436,15 +436,18 @@ def process_associated_cell_info(event_cells, event_cell_truths,  track_part_Idx
         cell_part_IDs = filtered_cell_truths[cell_idx]["cell_hitsTruthIndices"]
         cell_part_Es = filtered_cell_truths[cell_idx]["cell_hitsTruthEs"]
 
+        total_energy = np.sum(filtered_cell_truths[cell_idx]["cell_hitsTruthEs"])  # Sum of all particle energy deposits in the cell
+        tracks_sample.field("Total_Truth_Energy").real(total_energy)
 
         if track_part_Idx in cell_part_IDs:
             found_index = np.where(cell_part_IDs == track_part_Idx)[0][0]  # Locate index of track_part_Idx in cell_part_IDs
             part_energy = filtered_cell_truths[cell_idx]["cell_hitsTruthEs"][found_index]  # Retrieve corresponding energy deposit
-            total_energy = np.sum(filtered_cell_truths[cell_idx]["cell_hitsTruthEs"])  # Sum of all particle energy deposits in the cell
-            energy_fraction = part_energy / total_energy  # Calculate energy fraction
-            tracks_sample.field("Label").real(energy_fraction)
+            energy_fraction = part_energy / total_energy  # Calculate energy fraction 
+            tracks_sample.field("Fraction_Label").real(energy_fraction)
+            tracks_sample.field("Total_Label").real(total_energy)
         else:
-            tracks_sample.field("Label").real(0)
+            tracks_sample.field("Fraction_Label").real(0)
+            tracks_sample.field("Total_Label").real(0)
             
         tracks_sample.field("cell_Hits_TruthIndices")
         tracks_sample.begin_list()

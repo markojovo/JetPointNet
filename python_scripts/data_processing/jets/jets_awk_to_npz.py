@@ -13,6 +13,12 @@ def read_parquet(filename):
     ak_array = ak.from_arrow(table)
     return ak_array
 
+# Make sure this happens after SAVE_LOC is defined and created if necessary
+for folder in DATA_FOLDERS:
+    folder_path = os.path.join(SAVE_LOC, folder)
+    os.makedirs(folder_path, exist_ok=True)  # This line ensures the SAVE_LOC directories exist
+
+
 def find_global_max_sample_length():
     global_max_sample_length = 0
     for folder in DATA_FOLDERS:
@@ -27,6 +33,7 @@ def find_global_max_sample_length():
     print(f"Global Max Sample Length: {global_max_sample_length}")
     return global_max_sample_length
 
+find_global_max_sample_length()
 global_max_sample_length = 859 #placeholder for now 
 
 
@@ -46,12 +53,15 @@ for data_folder in DATA_FOLDERS:
         chunk_file_name = sorted(chunk_files)[i]
         ak_array = read_parquet(os.path.join(data_folder_path, chunk_file_name))
 
-        labels = build_labels_array(ak_array, global_max_sample_length)
+        frac_labels = build_labels_array(ak_array, global_max_sample_length, "Fraction_Label")
+        tot_labels = build_labels_array(ak_array, global_max_sample_length, "Total_Label")
+        tot_truth_e = build_labels_array(ak_array, global_max_sample_length, "Total_Truth_Energy")
+
         feats = build_input_array(ak_array, global_max_sample_length)
 
         # Save the feats and labels arrays to an NPZ file for each chunk
         npz_save_path = os.path.join(npz_data_folder_path, f'chunk_{i}_{data_folder}.npz')
-        np.savez(npz_save_path, feats=feats, labels=labels)
+        np.savez(npz_save_path, feats=feats, frac_labels=frac_labels, tot_labels=tot_labels, tot_truth_e = tot_truth_e)
         end_time = time.time()
         print(f"    Saved {data_folder} chunk {i} to {npz_save_path}...", end="")
         print(f"    Chunk processing took: ", end_time - start_time, "seconds")

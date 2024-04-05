@@ -12,3 +12,6 @@ nohup.out
 training_log.csv
 
 __pycache__
+__pycache__/
+*/__pycache__
+models/__pycache__/
