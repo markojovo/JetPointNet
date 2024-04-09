@@ -1,5 +1,5 @@
 from util_functs import print_events, calculate_max_sample_length, build_labels_array, build_input_array
-from both import SAVE_LOC, NPZ_SAVE_LOC
+from preprocessing_header import SAVE_LOC, NPZ_SAVE_LOC
 import awkward as ak
 import pyarrow.parquet as pq
 import numpy as np

@@ -8,7 +8,7 @@ from keras.layers import Layer
 
 
 
-# Part segmentation models
+# Part segmentation models, the old models from Jessica's work. Can use if needed
 
 # https://keras.io/examples/vision/pointnet_segmentation/
 def conv_block(x: tf.Tensor, filters: int, name: str) -> tf.Tensor:

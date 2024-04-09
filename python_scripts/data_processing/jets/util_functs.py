@@ -3,7 +3,7 @@ import awkward as ak
 import sys
 from track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
 HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
-from both import *
+from preprocessing_header import *
 
 # =======================================================================================================================
 # ============ UTILITY FUNCTIONS ================================================================================
