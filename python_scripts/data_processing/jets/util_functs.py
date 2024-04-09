@@ -3,7 +3,7 @@ import awkward as ak
 import sys
 from track_metadata import calo_layers, has_fixed_r, fixed_r, fixed_z  # Assuming these are correctly defined
 HAS_FIXED_R, FIXED_R, FIXED_Z = has_fixed_r, fixed_r, fixed_z
-from both import *
+from preprocessing_header import *
 
 # =======================================================================================================================
 # ============ UTILITY FUNCTIONS ================================================================================
@@ -123,7 +123,7 @@ def print_events(tracks_sample_array, NUM_EVENTS_TO_PRINT):
 
 # =======================================================================================================================
 
-def build_input_array(tracks_sample_array, max_sample_length):
+def build_input_array(tracks_sample_array, max_sample_length, energy_scale = 1):
     samples = []
 
     for event in tracks_sample_array:
@@ -137,7 +137,7 @@ def build_input_array(tracks_sample_array, max_sample_length):
                 track_points.append([intersection['X'], intersection['Y'], intersection['Z'], 0, track['trackPt'], 1])
 
             for cell in track['associated_cells']:
-                track_points.append([cell['X'], cell['Y'], cell['Z'], cell['distance_to_track'], cell['E'], 0])
+                track_points.append([cell['X'], cell['Y'], cell['Z'], cell['distance_to_track'], cell['E']*energy_scale, 0])
 
             for associated_track in track['associated_tracks']:
                 for intersection in associated_track['track_layer_intersections']:
@@ -163,7 +163,7 @@ def build_input_array(tracks_sample_array, max_sample_length):
 
 # =======================================================================================================================
 
-def build_labels_array(tracks_sample_array, max_sample_length, label_string):
+def build_labels_array(tracks_sample_array, max_sample_length, label_string, label_scale = 1):
     labels_list = []
 
     for event in tracks_sample_array:
@@ -188,7 +188,7 @@ def build_labels_array(tracks_sample_array, max_sample_length, label_string):
 
             # Adjust for possible truncation
             end_cell_idx = min(num_focused_track_points + num_associated_cells, max_sample_length)
-            label_array[num_focused_track_points:end_cell_idx] = track['associated_cells'][label_string][:end_cell_idx - num_focused_track_points]
+            label_array[num_focused_track_points:end_cell_idx] = track['associated_cells'][label_string][:end_cell_idx - num_focused_track_points] * label_scale
 
             start_idx = num_focused_track_points + num_associated_cells
             end_idx = start_idx + num_associated_track_points

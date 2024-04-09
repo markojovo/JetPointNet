@@ -1,5 +1,5 @@
 from util_functs import print_events, calculate_max_sample_length, build_labels_array, build_input_array
-from both import SAVE_LOC, NPZ_SAVE_LOC
+from preprocessing_header import SAVE_LOC, NPZ_SAVE_LOC
 import awkward as ak
 import pyarrow.parquet as pq
 import numpy as np
@@ -54,10 +54,10 @@ for data_folder in DATA_FOLDERS:
         ak_array = read_parquet(os.path.join(data_folder_path, chunk_file_name))
 
         frac_labels = build_labels_array(ak_array, global_max_sample_length, "Fraction_Label")
-        tot_labels = build_labels_array(ak_array, global_max_sample_length, "Total_Label")
-        tot_truth_e = build_labels_array(ak_array, global_max_sample_length, "Total_Truth_Energy")
+        tot_labels = build_labels_array(ak_array, global_max_sample_length, "Total_Label", label_scale = 1000)
+        tot_truth_e = build_labels_array(ak_array, global_max_sample_length, "Total_Truth_Energy", label_scale = 1000)
 
-        feats = build_input_array(ak_array, global_max_sample_length)
+        feats = build_input_array(ak_array, global_max_sample_length, energy_scale = 1000)
 
         # Save the feats and labels arrays to an NPZ file for each chunk
         npz_save_path = os.path.join(npz_data_folder_path, f'chunk_{i}_{data_folder}.npz')
