@@ -80,10 +80,15 @@ def TNet(input_tensor, size, add_regularization=False):
     x = tf.reshape(x, (-1, size, size))
     return x        
 
+def TSSR_Activation(x):
+    # From https://arxiv.org/pdf/2308.04832.pdf
+    condition = tf.abs(x) < 1
+    return tf.where(condition, x, tf.sign(x) * (2*tf.sqrt(tf.abs(x)) - 1))
 
-def PointNetSegmentation(num_points, num_classes, outputFcn='relu'):
+def PointNetSegmentation(num_points, num_classes):
     num_features = 6  # Number of input features
 
+    network_size_factor = 5 # Mess around with this along with the different layer sizes
     input_points = tf.keras.Input(shape=(num_points, num_features))
 
     # T-Net for input transformation
@@ -96,9 +101,9 @@ def PointNetSegmentation(num_points, num_classes, outputFcn='relu'):
     # T-Net for feature transformation
     feature_tnet = TNet(x, 64, add_regularization=True)
     x = tf.keras.layers.Dot(axes=(2, 1))([x, feature_tnet])
-    x = conv_mlp(x, 64)
-    x = conv_mlp(x, 128)
-    x = conv_mlp(x, 1024)
+    x = conv_mlp(x, 64 * network_size_factor)
+    x = conv_mlp(x, 128 * network_size_factor)
+    x = conv_mlp(x, 1024 * network_size_factor)
 
     global_feature = tf.keras.layers.GlobalMaxPooling1D()(x)
     global_feature_expanded = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, 1))(global_feature)
@@ -106,18 +111,18 @@ def PointNetSegmentation(num_points, num_classes, outputFcn='relu'):
 
     # Concatenate point features with global features
     c = tf.keras.layers.Concatenate()([point_features, global_feature_expanded])
-    c = conv_mlp(c, 512)
-    c = conv_mlp(c, 256)
-    c = conv_mlp(c, 128, dropout_rate=0.3)
+    c = conv_mlp(c, 512 * network_size_factor)
+    c = conv_mlp(c, 256 * network_size_factor)
+    c = conv_mlp(c, 128 * network_size_factor, dropout_rate=0.3)
 
     # Extract energy from input and multiply by the segmentation output
-    #energy = tf.expand_dims(input_points[:, :, 4], -1)  # Assuming energy is at index 4
-    #segmentation_output_pre_sigmoid = tf.keras.layers.Conv1D(num_classes, kernel_size=1)(c)  # No activation yet
-    #segmentation_output_pre_sigmoid = tf.keras.layers.Activation('sigmoid')(segmentation_output_pre_sigmoid)  # Apply sigmoid
-    #segmentation_output = tf.multiply(segmentation_output_pre_sigmoid, energy)  # Multiply by energy
+    energy = tf.expand_dims(input_points[:, :, 4], -1)  # Assuming energy is at index 4
+    segmentation_output_pre_sigmoid = tf.keras.layers.Conv1D(num_classes, kernel_size=1)(c)  # No activation yet
+    segmentation_output_pre_sigmoid = tf.keras.layers.Activation(TSSR_Activation)(segmentation_output_pre_sigmoid)  # Apply sigmoid
+    segmentation_output = tf.multiply(segmentation_output_pre_sigmoid, energy)  # Multiply by energy
 
-    segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation="relu")(c)
-    #segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation="sigmoid")(c)  # No activation yet
+    #segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation = "relu")(c)  # No activation yet
+
     model = tf.keras.Model(inputs=input_points, outputs=segmentation_output)
 
     return model
@@ -135,7 +140,7 @@ def masked_bce_loss(y_true, y_pred_outputs):
 
 def masked_mse_loss(y_true, y_pred_outputs):
     y_pred = y_pred_outputs
-    scale_factor = 100
+    scale_factor = 1
 
     mask = tf.not_equal(y_true, -1.0)
     mask = tf.cast(mask, tf.float32)

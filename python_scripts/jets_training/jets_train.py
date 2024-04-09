@@ -11,14 +11,16 @@ import sys
 import time
 from models.JetPointNet import PointNetSegmentation, masked_bce_loss, masked_mae_loss, masked_mse_loss
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "3" # SET GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = "4" # SET GPU
 
 
 
 MAX_SAMPLE_LENGTH=859
 
+
+
 class BatchNormalizationMomentumScheduler(tf.keras.callbacks.Callback):
-    def __init__(self, initial_momentum=0.5, final_momentum=0.99, total_epochs=120):
+    def __init__(self, initial_momentum=0.5, final_momentum=0.99, total_epochs=20):
         self.initial_momentum = initial_momentum
         self.final_momentum = final_momentum
         self.total_epochs = total_epochs
@@ -71,14 +73,14 @@ def save_model_on_epoch_end(epoch, logs):
     model.save(f"saved_model/PointNetModel.keras") 
 
 def scheduler(epoch, lr):
-    if epoch > 0 and epoch % 20 == 0: 
+    if epoch > 0 and epoch % 2 == 0: 
         return lr * 0.5
     else:
         return lr
 
-initial_learning_rate = 0.001 
-BATCH_SIZE = 120
-EPOCHS = 120
+initial_learning_rate = 0.001 / 1000000 
+BATCH_SIZE = 48
+EPOCHS = 20
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
 VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'
 
@@ -106,12 +108,12 @@ print(f"Model Size: {model_size_in_megabytes:.2f} MB")
 print("Training on Dataset: ", TRAIN_DIR)
 
 
-
 # Define your callbacks
 lr_scheduler = tf.keras.callbacks.LearningRateScheduler(scheduler)
 csv_logger = CSVLogger('saved_model/training_log.csv', append=True, separator=';')
 save_model_callback = LambdaCallback(on_epoch_end=save_model_on_epoch_end)
 batch_norm_scheduler = BatchNormalizationMomentumScheduler(total_epochs=EPOCHS)
+
 
 start_time = time.time()
 model.fit(train_generator,
