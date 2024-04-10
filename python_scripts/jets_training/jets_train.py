@@ -36,6 +36,22 @@ def load_data_from_npz(npz_file):
     frac_labels = data['frac_labels']  # Shape: (num_samples, 859)
     tot_labels = data['tot_labels']  # Shape: (num_samples, 859)
     tot_truth_e = data['tot_truth_e']  # Shape: (num_samples, 859) (This is the true total energy deposited by particles into this cell)
+
+    '''
+    feats:
+        are the input features
+
+    frac_labels:
+        is a bounded value from 0 to 1 representing the amount of truth energy deposited in this cell that belongs to the focused particle
+
+    tot_labels:
+        is an unbounded value representing the absolute amount of truth energy deposited in this cell that belongs to the focused particle (in MeV if scaled by 1000 in data preprocessing, GeV if scaled by 1)
+
+    tot_truth_e:
+        is the total truth energy deposited into this cell from all particles. I've included it in the dataset for if you want to use during testing
+
+    Labels take the form of a 1D array of size NUM_POINTS, with the index of the output label corresponding to the index of the input point. This is a nice feature of PointNet.
+    '''
     return feats, frac_labels, tot_labels, tot_truth_e
 
 def data_generator(data_dir, batch_size):
@@ -47,6 +63,7 @@ def data_generator(data_dir, batch_size):
             #Think of a better way to handle the different label types
             labels = tot_labels # predicting the absolute truth energy from focused particle
             # labels = frac_labels # predicting the fraction of truth energy from focused particle (absolute / total)
+
 
             dataset_size = feats.shape[0]
             for i in range(0, dataset_size, batch_size):

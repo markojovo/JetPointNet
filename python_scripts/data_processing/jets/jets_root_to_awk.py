@@ -69,7 +69,7 @@ def process_events(data, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo
                 break
 
         
-        event_cells, event_cell_truths, track_etas, track_phis = process_and_filter_cells(event, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo)
+        event_cells, event_cell_truths, track_etas, track_phis = process_and_filter_cells(event, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo) # Flatten and process cells in this event
 
         
         tracks_sample.begin_list()  # Start a new list for each event to hold tracks
@@ -104,13 +104,6 @@ def process_events(data, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo
         tracks_sample.end_list()  # End the list for the current event
         progress_dict[str(thread_id)] = event_idx / len(data)
     return tracks_sample.snapshot()  # Convert the ArrayBuilder to an actual Awkward array and return it
-
-def save_to_disk(processed_data, filename):
-    """
-    Save the processed data to disk.
-    """
-    # Example: saving as a Parquet file (implementation depends on the desired format)
-    ak.to_parquet(processed_data, filename)
 
 def process_chunk_with_progress(chunk, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo, progress_dict):
     """

@@ -102,9 +102,21 @@ def TNet(input_tensor, size, add_regularization=False):
 
 
 def PointNetSegmentation(num_points, num_classes):
-    num_features = 6  # Number of input features
+    num_features = 6  # Number of input features per point
+    '''
+    Input shape per point is:
+       [x (mm),
+        y (mm),
+        z (mm),
+        minimum_of_distance_to_focused_track (mm),
+        energy (MeV),
+        type (-1 for masked, 0 for calorimeter cell, 1 for focused track and 2 for other track)]
+    
+    Note that in awk_to_npz.py, if add_tracks_as_labels == False then the labels for the tracks is "-1" (to be masked of the loss and not predicted on)
 
-    network_size_factor = 5 # Mess around with this along with the different layer sizes
+    '''
+
+    network_size_factor = 5 # Mess around with this along with the different layer sizes 
 
     input_points = tf.keras.Input(shape=(num_points, num_features))
 
