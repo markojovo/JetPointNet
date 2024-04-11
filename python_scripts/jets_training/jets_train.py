@@ -9,7 +9,7 @@ import os
 import glob
 import sys
 import time
-from models.JetPointNet import PointNetSegmentation, masked_bce_loss, masked_mae_loss, masked_mse_loss
+from models.JetPointNet import PointNetSegmentation, masked_bce_loss, masked_mae_loss, masked_mse_loss, masked_huber_loss
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "4" # SET GPU
 
@@ -92,7 +92,7 @@ def scheduler(epoch, lr):
         return lr
 
 initial_learning_rate = 0.001 / 1000000 
-BATCH_SIZE = 48
+BATCH_SIZE = 24
 EPOCHS = 20
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
 VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'

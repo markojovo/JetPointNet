@@ -23,7 +23,8 @@ def split_and_save_to_disk(processed_data, base_filename):
     """
     
     # NOTE: THIS SPLITS BY TOTAL SAMPLE AMOUNT, AND NOT SPLITTING BY EVENT, SMALL CHANCE OF TRAIN-TEST OVERLAP (like in cells included in multiple tracks), change at some point later 
-    num_events = len(processed_data['eventNumber'])  #can probably just go max(processed_data['eventNumber']) - min(processed_data['eventNumber']) or something once eventNumbers are being saved properly
+    num_events = len(processed_data['eventNumber'])  # Note that at the moment since everything is flattened, this is just the total number of samples
+    #can probably just go max(processed_data['eventNumber']) - min(processed_data['eventNumber'])? would just need to make sure splitting is done based on the 'eventNumber' field and not array slicing
     # ===
 
     train_cutoff = int(num_events * TRAIN_SPLIT_RATIO)
