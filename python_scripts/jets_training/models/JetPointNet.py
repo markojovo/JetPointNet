@@ -53,8 +53,8 @@ class OrthogonalRegularizer(tf.keras.regularizers.Regularizer):
     
 
 def rectified_TSSR_Activation(x):
-    a = 0.001 # leaky ReLu style slope when negative
-    b = 0.01 # sqrt(x) damping coefficient when x > 1
+    a = 0.05 # leaky ReLu style slope when negative
+    b = 0.1 # sqrt(x) damping coefficient when x > 1
     
     # Adapted from https://arxiv.org/pdf/2308.04832.pdf
     # An activation function that's linear when 0 < x < 1 and (an adjusted) sqrt when x > 1,
@@ -65,7 +65,7 @@ def rectified_TSSR_Activation(x):
 
     negative_condition = x < 0
     small_positive_condition = tf.logical_and(tf.greater_equal(x, 0), tf.less(x, 1))
-    large_positive_condition = x >= 1
+    #large_positive_condition = x >= 1
     
     negative_part = a * x
     small_positive_part = x
