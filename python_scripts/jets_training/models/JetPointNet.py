@@ -52,13 +52,27 @@ class OrthogonalRegularizer(tf.keras.regularizers.Regularizer):
         return {'num_features': self.num_features, 'l2': self.l2}
     
 
-def TSSR_Activation(x):
-    # An activation function that's linear when |x| < 1 and (an adjusted) sqrt when |x| > 1 (is kinda like a "soft tanh" function that isn't bounded in output)
+def rectified_TSSR_Activation(x):
+    a = 0.05 # leaky ReLu style slope when negative
+    b = 0.1 # sqrt(x) damping coefficient when x > 1
+    
     # Adapted from https://arxiv.org/pdf/2308.04832.pdf
-    # Careful, can produce negative values (can mess around with this, I think it might be good to stabilize training) - ie the problem of hard constraints vs soft constraints in an optimization problem
-    high_value_slope_coefficient = 1 #Value to multiply by the sqrt|x| part, lower means flatter, higher means steeper
-    condition = tf.abs(x) < 1
-    return tf.where(condition, x, tf.sign(x) * (high_value_slope_coefficient*tf.sqrt(tf.abs(x)) - high_value_slope_coefficient + 1))
+    # An activation function that's linear when 0 < x < 1 and (an adjusted) sqrt when x > 1,
+    # behaves like leaky ReLU when x < 0.
+
+    # 'a' is the slope coefficient for x < 0.
+    # 'b' is the value to multiply by the sqrt(x) part.
+
+    negative_condition = x < 0
+    small_positive_condition = tf.logical_and(tf.greater_equal(x, 0), tf.less(x, 1))
+    #large_positive_condition = x >= 1
+    
+    negative_part = a * x
+    small_positive_part = x
+    large_positive_part = tf.sign(x) * (b * tf.sqrt(tf.abs(x)) - b + 1)
+    
+    return tf.where(negative_condition, negative_part, 
+                    tf.where(small_positive_condition, small_positive_part, large_positive_part))
 
 # =======================================================================================================================
 # =======================================================================================================================
@@ -102,9 +116,21 @@ def TNet(input_tensor, size, add_regularization=False):
 
 
 def PointNetSegmentation(num_points, num_classes):
-    num_features = 6  # Number of input features
+    num_features = 6  # Number of input features per point
+    '''
+    Input shape per point is:
+       [x (mm),
+        y (mm),
+        z (mm),
+        minimum_of_distance_to_focused_track (mm),
+        energy (MeV),
+        type (-1 for masked, 0 for calorimeter cell, 1 for focused track and 2 for other track)]
+    
+    Note that in awk_to_npz.py, if add_tracks_as_labels == False then the labels for the tracks is "-1" (to be masked of the loss and not predicted on)
 
-    network_size_factor = 5 # Mess around with this along with the different layer sizes
+    '''
+
+    network_size_factor = 10 # Mess around with this along with the different layer sizes 
 
     input_points = tf.keras.Input(shape=(num_points, num_features))
 
@@ -136,7 +162,7 @@ def PointNetSegmentation(num_points, num_classes):
     # Extract energy from input and multiply by the segmentation output
     energy = tf.expand_dims(input_points[:, :, 4], -1)  # Assuming energy is at index 4
     segmentation_output_pre_sigmoid = tf.keras.layers.Conv1D(num_classes, kernel_size=1)(c)  # No activation yet ("sigmoid" here is a misnomer, we're using TSSR. Feel free to update)
-    segmentation_output_pre_sigmoid = tf.keras.layers.Activation(TSSR_Activation)(segmentation_output_pre_sigmoid) # Apply activation + adjust float back to 32 bit for training (a smarter way to do this probably exists)
+    segmentation_output_pre_sigmoid = tf.keras.layers.Activation(rectified_TSSR_Activation)(segmentation_output_pre_sigmoid) # Apply activation + adjust float back to 32 bit for training (a smarter way to do this probably exists)
     segmentation_output = tf.multiply(segmentation_output_pre_sigmoid, energy)  # Multiply by energy
 
     model = tf.keras.Model(inputs=input_points, outputs=segmentation_output)
@@ -184,6 +210,26 @@ def masked_mae_loss(y_true, y_pred_outputs):
     base_loss = tf.keras.losses.mean_absolute_error(y_true, y_pred)
     masked_loss = base_loss * mask
 
+    batch_size = tf.cast(tf.shape(y_true)[0], tf.float32)
+    return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask) / batch_size
+
+def masked_huber_loss(y_true, y_pred_outputs):
+    delta = 1.0
+    y_pred = y_pred_outputs
+    
+    # Creating a mask for valid (non -1) entries
+    mask = tf.not_equal(y_true, -1.0)
+    mask = tf.cast(mask, tf.float32)
+    mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
+
+    # Using Huber loss from Keras, with delta parameter for the transition between squared and linear loss
+    huber_loss_fn = tf.keras.losses.Huber(delta=delta, reduction=tf.keras.losses.Reduction.NONE)
+    base_loss = huber_loss_fn(y_true, y_pred)
+
+    # Apply the mask
+    masked_loss = base_loss * mask
+
+    # Normalizing the loss to the batch size
     batch_size = tf.cast(tf.shape(y_true)[0], tf.float32)
     return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask) / batch_size
 

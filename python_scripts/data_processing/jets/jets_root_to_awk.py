@@ -23,7 +23,8 @@ def split_and_save_to_disk(processed_data, base_filename):
     """
     
     # NOTE: THIS SPLITS BY TOTAL SAMPLE AMOUNT, AND NOT SPLITTING BY EVENT, SMALL CHANCE OF TRAIN-TEST OVERLAP (like in cells included in multiple tracks), change at some point later 
-    num_events = len(processed_data['eventNumber'])  #can probably just go max(processed_data['eventNumber']) - min(processed_data['eventNumber']) or something once eventNumbers are being saved properly
+    num_events = len(processed_data['eventNumber'])  # Note that at the moment since everything is flattened, this is just the total number of samples
+    #can probably just go max(processed_data['eventNumber']) - min(processed_data['eventNumber'])? would just need to make sure splitting is done based on the 'eventNumber' field and not array slicing
     # ===
 
     train_cutoff = int(num_events * TRAIN_SPLIT_RATIO)
@@ -69,7 +70,7 @@ def process_events(data, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo
                 break
 
         
-        event_cells, event_cell_truths, track_etas, track_phis = process_and_filter_cells(event, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo)
+        event_cells, event_cell_truths, track_etas, track_phis = process_and_filter_cells(event, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo) # Flatten and process cells in this event
 
         
         tracks_sample.begin_list()  # Start a new list for each event to hold tracks
@@ -104,13 +105,6 @@ def process_events(data, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo
         tracks_sample.end_list()  # End the list for the current event
         progress_dict[str(thread_id)] = event_idx / len(data)
     return tracks_sample.snapshot()  # Convert the ArrayBuilder to an actual Awkward array and return it
-
-def save_to_disk(processed_data, filename):
-    """
-    Save the processed data to disk.
-    """
-    # Example: saving as a Parquet file (implementation depends on the desired format)
-    ak.to_parquet(processed_data, filename)
 
 def process_chunk_with_progress(chunk, cell_ID_geo, cell_eta_geo, cell_phi_geo, cell_rPerp_geo, progress_dict):
     """
