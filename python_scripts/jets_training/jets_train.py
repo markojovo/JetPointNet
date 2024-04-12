@@ -9,7 +9,7 @@ import os
 import glob
 import sys
 import time
-from models.JetPointNet import PointNetSegmentation, masked_bce_loss, masked_mae_loss, masked_mse_loss, masked_huber_loss
+from models.JetPointNet import PointNetSegmentation, masked_bce_loss, masked_mae_loss, masked_mse_loss, masked_huber_loss, masked_mse_bce_loss, custom_accuracy_metric
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "4" # SET GPU
 
@@ -86,14 +86,14 @@ def save_model_on_epoch_end(epoch, logs):
     model.save(f"saved_model/PointNetModel.keras") 
 
 def scheduler(epoch, lr):
-    if epoch > 0 and epoch % 2 == 0: 
-        return lr * 0.5
+    if epoch > 0 and epoch % 1 == 0: 
+        return lr * 0.95
     else:
         return lr
 
-initial_learning_rate = 0.001 / 1000000 
-BATCH_SIZE = 24
-EPOCHS = 20
+initial_learning_rate = 0.005 / 1000000 
+BATCH_SIZE = 48
+EPOCHS = 120
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
 VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'
 
@@ -108,7 +108,8 @@ model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1)
 optimizer = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
 
 # Compile the model with loss=None due to custom loss within the model
-model.compile(optimizer=optimizer, loss=masked_mse_loss, metrics=[masked_mae_loss])  # Consider updating or customizing metrics as necessary
+model.compile(optimizer=optimizer, loss=custom_accuracy_metric, metrics=[masked_mae_loss, masked_mse_bce_loss, custom_accuracy_metric])  # Consider updating or customizing metrics as necessary
+
 
 
 model.summary()
