@@ -77,6 +77,9 @@ def rectified_TSSR_Activation(x):
 def custom_sigmoid(x, a = 3.0):
     return 1 / (1 + tf.exp(-a * x))
 
+def hard_sigmoid(x):
+    return tf.keras.backend.cast(x > 0, dtype=tf.float32)
+
 # =======================================================================================================================
 # =======================================================================================================================
 
@@ -165,8 +168,8 @@ def PointNetSegmentation(num_points, num_classes):
     # Extract energy from input and multiply by the segmentation output
     energy = tf.expand_dims(input_points[:, :, 4], -1)  # Assuming energy is at index 4
     segmentation_output_pre_sigmoid = tf.keras.layers.Conv1D(num_classes, kernel_size=1)(c)  # No activation yet ("sigmoid" here is a misnomer, we're using TSSR. Feel free to update)
-    #segmentation_output_pre_sigmoid = tf.keras.layers.Activation("sigmoid")(segmentation_output_pre_sigmoid)
-    segmentation_output_pre_sigmoid = tf.keras.layers.Activation(rectified_TSSR_Activation)(segmentation_output_pre_sigmoid) # Apply activation + adjust float back to 32 bit for training (a smarter way to do this probably exists)
+    segmentation_output_pre_sigmoid = tf.keras.layers.Activation("sigmoid")(segmentation_output_pre_sigmoid)
+    #segmentation_output_pre_sigmoid = tf.keras.layers.Activation(rectified_TSSR_Activation)(segmentation_output_pre_sigmoid) # Apply activation + adjust float back to 32 bit for training (a smarter way to do this probably exists)
     segmentation_output = tf.multiply(segmentation_output_pre_sigmoid, energy)  # Multiply by energy
 
     model = tf.keras.Model(inputs=input_points, outputs=segmentation_output)
@@ -268,6 +271,23 @@ def masked_mae_loss(y_true, y_pred_outputs):
     
     return normalized_loss
 
+def masked_mse_loss(y_true, y_pred):
+    # Mask setup for excluding certain values from calculations
+    valid_mask = tf.not_equal(y_true, -1.0)  # Excludes -1 values from the loss calculation
+    valid_mask = tf.cast(valid_mask, tf.float32)
+    valid_mask = tf.squeeze(valid_mask, axis=-1)  # Ensure the mask is of correct dimension
+    
+    # Dynamic range normalization for MSE loss
+    y_true_valid = tf.boolean_mask(y_true, valid_mask)
+    dynamic_range = tf.maximum(tf.reduce_max(y_true_valid) - tf.reduce_min(y_true_valid), 1e-5)  # Avoid division by zero
+    
+    # MSE Loss calculation with normalization
+    mse_loss = tf.keras.losses.mean_squared_error(y_true, y_pred)
+    mse_loss = mse_loss * valid_mask  # Apply mask
+    normalized_mse_loss = tf.reduce_sum(mse_loss / dynamic_range**2) / tf.reduce_sum(valid_mask)
+
+    return normalized_mse_loss
+
 
 def masked_huber_loss(y_true, y_pred_outputs):
     delta = 1.0
@@ -302,18 +322,6 @@ def masked_bce_loss(y_true, y_pred_outputs):
     return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask) / batch_size # This might be kinda dumb, might be able to not use reduce_sum and avoid having to manually get batch_size
 
 
-def masked_mse_loss(y_true, y_pred_outputs):
-    y_pred = y_pred_outputs
-    scale_factor = 1 # For scaling the output and label pre-squaring the difference
-
-    mask = tf.not_equal(y_true, -1.0)
-    mask = tf.cast(mask, tf.float32)
-    mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
-    base_loss = tf.keras.losses.mean_squared_error(scale_factor*y_true, scale_factor*y_pred)
-    masked_loss = base_loss * mask
-
-    batch_size = tf.cast(tf.shape(y_true)[0], tf.float32)
-    return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask) / batch_size
 
 # =======================================================================================================================
 # =======================================================================================================================

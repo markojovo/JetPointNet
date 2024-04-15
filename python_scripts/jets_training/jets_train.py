@@ -11,7 +11,7 @@ import sys
 import time
 from models.JetPointNet import PointNetSegmentation, masked_bce_loss, masked_mae_loss, masked_mse_loss, masked_huber_loss, masked_mse_bce_loss, custom_accuracy_metric
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "4" # SET GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = "3" # SET GPU
 
 MAX_SAMPLE_LENGTH=859
 
@@ -108,7 +108,7 @@ model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1)
 optimizer = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
 
 # Compile the model with loss=None due to custom loss within the model
-model.compile(optimizer=optimizer, loss=custom_accuracy_metric, metrics=[masked_mae_loss, masked_mse_bce_loss, custom_accuracy_metric])  # Consider updating or customizing metrics as necessary
+model.compile(optimizer=optimizer, loss=masked_mse_loss, metrics=[masked_mae_loss, masked_mse_bce_loss, custom_accuracy_metric])  # Consider updating or customizing metrics as necessary
 
 
 
