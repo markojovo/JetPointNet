@@ -88,7 +88,7 @@ def hard_sigmoid(x):
 # =======================================================================================================================
 # ============ Main Model Blocks ========================================================================================
 
-def conv_mlp(input_tensor, filters, dropout_rate=None, apply_attention=True):
+def conv_mlp(input_tensor, filters, dropout_rate=None, apply_attention=False):
     x = tf.keras.layers.Conv1D(filters=filters, kernel_size=1, activation='relu')(input_tensor)
     x = tf.keras.layers.BatchNormalization()(x)
     
@@ -135,7 +135,7 @@ def TNet(input_tensor, size, add_regularization=False):
 
 def PointNetSegmentation(num_points, num_classes):
     num_features = 6  # Number of input features per point
-    network_size_factor = 10 # Mess around with this along with the different layer sizes 
+    network_size_factor = 5 # Mess around with this along with the different layer sizes 
 
     '''
     Input shape per point is:
@@ -159,15 +159,15 @@ def PointNetSegmentation(num_points, num_classes):
     # T-Net for input transformation
     input_tnet = TNet(input_points, num_features)
     x = tf.keras.layers.Dot(axes=(2, 1))([input_points, input_tnet])
-    x = conv_mlp(x, 64)
-    x = conv_mlp(x, 64)
+    x = conv_mlp(x, 72)
+    x = conv_mlp(x, 72)
     point_features = x
 
     # T-Net for feature transformation
-    feature_tnet = TNet(x, 64, add_regularization=True)
+    feature_tnet = TNet(x, 72, add_regularization=True)
     x = tf.keras.layers.Dot(axes=(2, 1))([x, feature_tnet])
-    x = conv_mlp(x, 64 * network_size_factor)
     x = conv_mlp(x, 128 * network_size_factor)
+    x = conv_mlp(x, 256 * network_size_factor)
     x = conv_mlp(x, 1024 * network_size_factor)
 
     # Get global features and expand
@@ -177,9 +177,10 @@ def PointNetSegmentation(num_points, num_classes):
 
     # Concatenate point features with global features
     c = tf.keras.layers.Concatenate()([point_features, global_feature_expanded])
-    c = conv_mlp(c, 512 * network_size_factor)
-    c = conv_mlp(c, 256 * network_size_factor)
-    c = conv_mlp(c, 128 * network_size_factor, dropout_rate=0.3)
+    c = conv_mlp(c, 512, apply_attention=True)
+    c = conv_mlp(c, 256, apply_attention=True)
+
+    c = conv_mlp(c, 128, dropout_rate=0.3)
 
     segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation='sigmoid', name='segmentation_output')(c)
 
@@ -227,3 +228,4 @@ def masked_accuracy(y_true, y_pred):
 
 # =======================================================================================================================
 # =======================================================================================================================
+
