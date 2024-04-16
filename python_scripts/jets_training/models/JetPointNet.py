@@ -88,12 +88,24 @@ def hard_sigmoid(x):
 # =======================================================================================================================
 # ============ Main Model Blocks ========================================================================================
 
-def conv_mlp(input_tensor, filters, dropout_rate = None):
-    # Apply shared MLPs which are equivalent to 1D convolutions with kernel size 1
+def conv_mlp(input_tensor, filters, dropout_rate=None, apply_attention=True):
     x = tf.keras.layers.Conv1D(filters=filters, kernel_size=1, activation='relu')(input_tensor)
     x = tf.keras.layers.BatchNormalization()(x)
+    
+    if apply_attention:
+        # Self-attention
+        attention_output_self = tf.keras.layers.MultiHeadAttention(num_heads=2, key_dim=filters)(x, x)
+        attention_output_self = tf.keras.layers.LayerNormalization()(attention_output_self + x)
+        
+        # Cross-attention
+        attention_output_cross = tf.keras.layers.MultiHeadAttention(num_heads=2, key_dim=filters)(attention_output_self, x)
+        attention_output_cross = tf.keras.layers.LayerNormalization()(attention_output_cross + attention_output_self)
+
+        x = attention_output_cross
+
     if dropout_rate is not None:
         x = tf.keras.layers.Dropout(dropout_rate)(x)
+
     return x
 
 def dense_block(input_tensor, units, dropout_rate=None, regularizer=None):
