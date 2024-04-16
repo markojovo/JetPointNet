@@ -186,15 +186,24 @@ def masked_weighted_bce_loss_wrapper(y_true, y_pred):
     return masked_weighted_bce_loss(y_true[0], y_pred[0], y_pred[1])
 
 def masked_weighted_bce_loss(y_true, y_pred, weights):
-    mask = tf.not_equal(y_true, -1.0)
-    mask = tf.cast(mask, tf.float32)
-    mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
+    # Create a mask that identifies valid (non-masked) entries
+    valid_mask = tf.not_equal(y_true, -1.0)
+    valid_mask = tf.cast(valid_mask, tf.float32)
+    valid_mask = tf.squeeze(valid_mask, axis=-1)  # Flatten the mask to match y_true's and y_pred's dimensions
 
-    base_loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=False)
-    masked_loss = base_loss * mask * weights  # Multiply by weights here
+    # Calculate binary cross-entropy loss
+    bce_loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=False)
+    bce_loss = bce_loss * valid_mask * weights  # Apply both the valid mask and the weights
 
-    return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask * weights)  # Normalize by the sum of weights where mask is true
+    # Calculate the sum of valid weights or use a fixed minimum value, whichever is larger
+    normalization_factor = tf.reduce_sum(valid_mask * weights, axis=1)
+    normalization_factor = tf.maximum(normalization_factor, 100)  # Ensure the normalization factor is at least 100
 
+    # Normalize each sample's loss by the determined factor
+    sample_normalized_bce_loss = tf.reduce_sum(bce_loss, axis=1) / normalization_factor
+
+    # Take the mean across the batch for a single loss value
+    return tf.reduce_mean(sample_normalized_bce_loss)
 
 def masked_accuracy(y_true, y_pred):
     mask = tf.not_equal(y_true, -1.0)

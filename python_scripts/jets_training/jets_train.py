@@ -91,7 +91,7 @@ def scheduler(epoch, lr):
     else:
         return lr
 
-initial_learning_rate = 5e-7
+initial_learning_rate = 1
 BATCH_SIZE = 24 #48
 EPOCHS = 120
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
