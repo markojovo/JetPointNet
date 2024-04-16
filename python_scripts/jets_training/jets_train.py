@@ -9,7 +9,7 @@ import os
 import glob
 import sys
 import time
-from models.JetPointNet import PointNetSegmentation, masked_bce_loss, masked_mae_loss, masked_mse_loss, masked_huber_loss, masked_mse_bce_loss, custom_accuracy_metric
+from models.JetPointNet import PointNetSegmentation, masked_weighted_bce_loss, masked_weighted_bce_loss_wrapper, masked_accuracy
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "3" # SET GPU
 
@@ -61,8 +61,8 @@ def data_generator(data_dir, batch_size):
             feats, frac_labels, tot_labels, tot_truth_e = load_data_from_npz(npz_file)
 
             #Think of a better way to handle the different label types
-            labels = tot_labels # predicting the absolute truth energy from focused particle
-            # labels = frac_labels # predicting the fraction of truth energy from focused particle (absolute / total)
+            # labels = tot_labels # predicting the absolute truth energy from focused particle
+            labels = frac_labels # predicting the fraction of truth energy from focused particle (absolute / total)
 
 
             dataset_size = feats.shape[0]
@@ -91,8 +91,8 @@ def scheduler(epoch, lr):
     else:
         return lr
 
-initial_learning_rate = 0.005 / 1000000 
-BATCH_SIZE = 48
+initial_learning_rate = 5e-7
+BATCH_SIZE = 24 #48
 EPOCHS = 120
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
 VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'
@@ -106,11 +106,7 @@ val_generator = data_generator(VAL_DIR, BATCH_SIZE)
 model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1)
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
-
-# Compile the model with loss=None due to custom loss within the model
-model.compile(optimizer=optimizer, loss=masked_mse_loss, metrics=[masked_mae_loss, masked_mse_bce_loss, custom_accuracy_metric])  # Consider updating or customizing metrics as necessary
-
-
+model.compile(optimizer=optimizer, loss=masked_weighted_bce_loss_wrapper, metrics={'segmentation_output': masked_accuracy})
 
 model.summary()
 model_params = model.count_params()
