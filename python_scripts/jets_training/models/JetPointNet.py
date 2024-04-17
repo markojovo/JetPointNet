@@ -53,7 +53,7 @@ class OrthogonalRegularizer(tf.keras.regularizers.Regularizer):
     
 
 def rectified_TSSR_Activation(x):
-    a = 0.05 # leaky ReLu style slope when negative
+    a = 0.01 # leaky ReLu style slope when negative
     b = 0.1 # sqrt(x) damping coefficient when x > 1
     
     # Adapted from https://arxiv.org/pdf/2308.04832.pdf
@@ -74,6 +74,12 @@ def rectified_TSSR_Activation(x):
     return tf.where(negative_condition, negative_part, 
                     tf.where(small_positive_condition, small_positive_part, large_positive_part))
 
+def custom_sigmoid(x, a = 3.0):
+    return 1 / (1 + tf.exp(-a * x))
+
+def hard_sigmoid(x):
+    return tf.keras.backend.cast(x > 0, dtype=tf.float32)
+
 # =======================================================================================================================
 # =======================================================================================================================
 
@@ -82,12 +88,24 @@ def rectified_TSSR_Activation(x):
 # =======================================================================================================================
 # ============ Main Model Blocks ========================================================================================
 
-def conv_mlp(input_tensor, filters, dropout_rate = None):
-    # Apply shared MLPs which are equivalent to 1D convolutions with kernel size 1
+def conv_mlp(input_tensor, filters, dropout_rate=None, apply_attention=False):
     x = tf.keras.layers.Conv1D(filters=filters, kernel_size=1, activation='relu')(input_tensor)
     x = tf.keras.layers.BatchNormalization()(x)
+    
+    if apply_attention:
+        # Self-attention
+        attention_output_self = tf.keras.layers.MultiHeadAttention(num_heads=2, key_dim=filters)(x, x)
+        attention_output_self = tf.keras.layers.LayerNormalization()(attention_output_self + x)
+        
+        # Cross-attention
+        attention_output_cross = tf.keras.layers.MultiHeadAttention(num_heads=2, key_dim=filters)(attention_output_self, x)
+        attention_output_cross = tf.keras.layers.LayerNormalization()(attention_output_cross + attention_output_self)
+
+        x = attention_output_cross
+
     if dropout_rate is not None:
         x = tf.keras.layers.Dropout(dropout_rate)(x)
+
     return x
 
 def dense_block(input_tensor, units, dropout_rate=None, regularizer=None):
@@ -117,6 +135,8 @@ def TNet(input_tensor, size, add_regularization=False):
 
 def PointNetSegmentation(num_points, num_classes):
     num_features = 6  # Number of input features per point
+    network_size_factor = 5 # Mess around with this along with the different layer sizes 
+
     '''
     Input shape per point is:
        [x (mm),
@@ -130,22 +150,24 @@ def PointNetSegmentation(num_points, num_classes):
 
     '''
 
-    network_size_factor = 10 # Mess around with this along with the different layer sizes 
-
     input_points = tf.keras.Input(shape=(num_points, num_features))
+
+    # Extract energy from input and multiply by the segmentation output
+    #energy = tf.expand_dims(input_points[:, :, 4], -1)  # Assuming energy is at index 4
+    energy = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x[:, :, 4], -1), name='energy_output')(input_points)
 
     # T-Net for input transformation
     input_tnet = TNet(input_points, num_features)
     x = tf.keras.layers.Dot(axes=(2, 1))([input_points, input_tnet])
-    x = conv_mlp(x, 64)
-    x = conv_mlp(x, 64)
+    x = conv_mlp(x, 72)
+    x = conv_mlp(x, 72)
     point_features = x
 
     # T-Net for feature transformation
-    feature_tnet = TNet(x, 64, add_regularization=True)
+    feature_tnet = TNet(x, 72, add_regularization=True)
     x = tf.keras.layers.Dot(axes=(2, 1))([x, feature_tnet])
-    x = conv_mlp(x, 64 * network_size_factor)
     x = conv_mlp(x, 128 * network_size_factor)
+    x = conv_mlp(x, 256 * network_size_factor)
     x = conv_mlp(x, 1024 * network_size_factor)
 
     # Get global features and expand
@@ -155,17 +177,14 @@ def PointNetSegmentation(num_points, num_classes):
 
     # Concatenate point features with global features
     c = tf.keras.layers.Concatenate()([point_features, global_feature_expanded])
-    c = conv_mlp(c, 512 * network_size_factor)
-    c = conv_mlp(c, 256 * network_size_factor)
-    c = conv_mlp(c, 128 * network_size_factor, dropout_rate=0.3)
+    c = conv_mlp(c, 512, apply_attention=True)
+    c = conv_mlp(c, 256, apply_attention=True)
 
-    # Extract energy from input and multiply by the segmentation output
-    energy = tf.expand_dims(input_points[:, :, 4], -1)  # Assuming energy is at index 4
-    segmentation_output_pre_sigmoid = tf.keras.layers.Conv1D(num_classes, kernel_size=1)(c)  # No activation yet ("sigmoid" here is a misnomer, we're using TSSR. Feel free to update)
-    segmentation_output_pre_sigmoid = tf.keras.layers.Activation(rectified_TSSR_Activation)(segmentation_output_pre_sigmoid) # Apply activation + adjust float back to 32 bit for training (a smarter way to do this probably exists)
-    segmentation_output = tf.multiply(segmentation_output_pre_sigmoid, energy)  # Multiply by energy
+    c = conv_mlp(c, 128, dropout_rate=0.3)
 
-    model = tf.keras.Model(inputs=input_points, outputs=segmentation_output)
+    segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation='sigmoid', name='segmentation_output')(c)
+
+    model = tf.keras.Model(inputs=input_points, outputs=[segmentation_output, energy])
 
     return model
 
@@ -176,62 +195,37 @@ def PointNetSegmentation(num_points, num_classes):
 # =======================================================================================================================
 # ============ Losses ===================================================================================================
 
-def masked_bce_loss(y_true, y_pred_outputs):
-    y_pred = y_pred_outputs
-    
+def masked_weighted_bce_loss_wrapper(y_true, y_pred):
+    return masked_weighted_bce_loss(y_true[0], y_pred[0], y_pred[1])
+
+def masked_weighted_bce_loss(y_true, y_pred, weights):
+    # Create a mask that identifies valid (non-masked) entries
+    valid_mask = tf.not_equal(y_true, -1.0)
+    valid_mask = tf.cast(valid_mask, tf.float32)
+    valid_mask = tf.squeeze(valid_mask, axis=-1)  # Flatten the mask to match y_true's and y_pred's dimensions
+
+    # Calculate binary cross-entropy loss
+    bce_loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=False)
+    bce_loss = bce_loss * valid_mask * weights  # Apply both the valid mask and the weights
+
+    # Calculate the sum of valid weights or use a fixed minimum value, whichever is larger
+    normalization_factor = tf.reduce_sum(valid_mask * weights, axis=1)
+    normalization_factor = tf.maximum(normalization_factor, 100)  # Ensure the normalization factor is at least 100
+
+    # Normalize each sample's loss by the determined factor
+    sample_normalized_bce_loss = tf.reduce_sum(bce_loss, axis=1) / normalization_factor
+
+    # Take the mean across the batch for a single loss value
+    return tf.reduce_mean(sample_normalized_bce_loss)
+
+def masked_accuracy(y_true, y_pred):
     mask = tf.not_equal(y_true, -1.0)
     mask = tf.cast(mask, tf.float32)
-    mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
-    base_loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=False) 
-    masked_loss = base_loss * mask
-
-    batch_size = tf.cast(tf.shape(y_true)[0], tf.float32)
-    return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask) / batch_size # This might be kinda dumb, might be able to not use reduce_sum and avoid having to manually get batch_size
-
-def masked_mse_loss(y_true, y_pred_outputs):
-    y_pred = y_pred_outputs
-    scale_factor = 1 # For scaling the output and label pre-squaring the difference
-
-    mask = tf.not_equal(y_true, -1.0)
-    mask = tf.cast(mask, tf.float32)
-    mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
-    base_loss = tf.keras.losses.mean_squared_error(scale_factor*y_true, scale_factor*y_pred)
-    masked_loss = base_loss * mask
-
-    batch_size = tf.cast(tf.shape(y_true)[0], tf.float32)
-    return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask) / batch_size
-
-def masked_mae_loss(y_true, y_pred_outputs):
-    y_pred = y_pred_outputs
-    
-    mask = tf.not_equal(y_true, -1.0)
-    mask = tf.cast(mask, tf.float32)
-    mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
-    base_loss = tf.keras.losses.mean_absolute_error(y_true, y_pred)
-    masked_loss = base_loss * mask
-
-    batch_size = tf.cast(tf.shape(y_true)[0], tf.float32)
-    return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask) / batch_size
-
-def masked_huber_loss(y_true, y_pred_outputs):
-    delta = 1.0
-    y_pred = y_pred_outputs
-    
-    # Creating a mask for valid (non -1) entries
-    mask = tf.not_equal(y_true, -1.0)
-    mask = tf.cast(mask, tf.float32)
-    mask = tf.squeeze(mask, axis=-1)  # Removes the last dimension if it's 1
-
-    # Using Huber loss from Keras, with delta parameter for the transition between squared and linear loss
-    huber_loss_fn = tf.keras.losses.Huber(delta=delta, reduction=tf.keras.losses.Reduction.NONE)
-    base_loss = huber_loss_fn(y_true, y_pred)
-
-    # Apply the mask
-    masked_loss = base_loss * mask
-
-    # Normalizing the loss to the batch size
-    batch_size = tf.cast(tf.shape(y_true)[0], tf.float32)
-    return tf.reduce_sum(masked_loss) / tf.reduce_sum(mask) / batch_size
+    correct_predictions = tf.equal(tf.round(y_pred), y_true)  # Assuming y_true is 0 or 1
+    masked_correct_predictions = tf.cast(correct_predictions, tf.float32) * mask
+    accuracy = tf.reduce_sum(masked_correct_predictions) / tf.reduce_sum(mask)
+    return accuracy
 
 # =======================================================================================================================
 # =======================================================================================================================
+

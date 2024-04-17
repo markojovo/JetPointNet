@@ -9,9 +9,9 @@ import os
 import glob
 import sys
 import time
-from models.JetPointNet import PointNetSegmentation, masked_bce_loss, masked_mae_loss, masked_mse_loss, masked_huber_loss
+from models.JetPointNet import PointNetSegmentation, masked_weighted_bce_loss, masked_weighted_bce_loss_wrapper, masked_accuracy
 
-os.environ['CUDA_VISIBLE_DEVICES'] = "4" # SET GPU
+os.environ['CUDA_VISIBLE_DEVICES'] = "3" # SET GPU
 
 MAX_SAMPLE_LENGTH=859
 
@@ -61,8 +61,8 @@ def data_generator(data_dir, batch_size):
             feats, frac_labels, tot_labels, tot_truth_e = load_data_from_npz(npz_file)
 
             #Think of a better way to handle the different label types
-            labels = tot_labels # predicting the absolute truth energy from focused particle
-            # labels = frac_labels # predicting the fraction of truth energy from focused particle (absolute / total)
+            # labels = tot_labels # predicting the absolute truth energy from focused particle
+            labels = frac_labels # predicting the fraction of truth energy from focused particle (absolute / total)
 
 
             dataset_size = feats.shape[0]
@@ -86,14 +86,14 @@ def save_model_on_epoch_end(epoch, logs):
     model.save(f"saved_model/PointNetModel.keras") 
 
 def scheduler(epoch, lr):
-    if epoch > 0 and epoch % 2 == 0: 
-        return lr * 0.5
+    if epoch > 0 and epoch % 1 == 0: 
+        return lr * 0.9
     else:
         return lr
 
-initial_learning_rate = 0.001 / 1000000 
-BATCH_SIZE = 24
-EPOCHS = 20
+initial_learning_rate = 1
+BATCH_SIZE = 48
+EPOCHS = 120
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
 VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'
 
@@ -106,10 +106,7 @@ val_generator = data_generator(VAL_DIR, BATCH_SIZE)
 model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1)
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
-
-# Compile the model with loss=None due to custom loss within the model
-model.compile(optimizer=optimizer, loss=masked_mse_loss, metrics=[masked_mae_loss])  # Consider updating or customizing metrics as necessary
-
+model.compile(optimizer=optimizer, loss=masked_weighted_bce_loss_wrapper, metrics={'segmentation_output': masked_accuracy})
 
 model.summary()
 model_params = model.count_params()
