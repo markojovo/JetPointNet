@@ -135,7 +135,7 @@ def TNet(input_tensor, size, add_regularization=False):
 
 def PointNetSegmentation(num_points, num_classes):
     num_features = 6  # Number of input features per point
-    network_size_factor = 5 # Mess around with this along with the different layer sizes 
+    network_size_factor = 8 # Mess around with this along with the different layer sizes 
 
     '''
     Input shape per point is:
@@ -177,8 +177,8 @@ def PointNetSegmentation(num_points, num_classes):
 
     # Concatenate point features with global features
     c = tf.keras.layers.Concatenate()([point_features, global_feature_expanded])
-    c = conv_mlp(c, 512, apply_attention=True)
-    c = conv_mlp(c, 256, apply_attention=True)
+    c = conv_mlp(c, 512)#, apply_attention=True)
+    c = conv_mlp(c, 256)#, apply_attention=True)
 
     c = conv_mlp(c, 128, dropout_rate=0.3)
 
@@ -206,11 +206,12 @@ def masked_weighted_bce_loss(y_true, y_pred, weights):
 
     # Calculate binary cross-entropy loss
     bce_loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=False)
-    bce_loss = bce_loss * valid_mask * weights  # Apply both the valid mask and the weights
+    weights_squared = tf.square(weights)  # Square the weights
+    bce_loss = bce_loss * valid_mask * weights_squared  # Apply both the valid mask and the squared weights
 
-    # Calculate the sum of valid weights or use a fixed minimum value, whichever is larger
-    normalization_factor = tf.reduce_sum(valid_mask * weights, axis=1)
-    normalization_factor = tf.maximum(normalization_factor, 100)  # Ensure the normalization factor is at least 100
+    # Calculate the sum of valid squared weights or use a fixed minimum value, whichever is larger
+    normalization_factor = tf.reduce_sum(valid_mask * weights_squared, axis=1)
+    normalization_factor = tf.maximum(normalization_factor, 1000)  # Ensure the normalization factor is at least 1000
 
     # Normalize each sample's loss by the determined factor
     sample_normalized_bce_loss = tf.reduce_sum(bce_loss, axis=1) / normalization_factor
@@ -219,11 +220,17 @@ def masked_weighted_bce_loss(y_true, y_pred, weights):
     return tf.reduce_mean(sample_normalized_bce_loss)
 
 def masked_accuracy(y_true, y_pred):
+    # Create a mask to ignore positions where y_true is -1.0
     mask = tf.not_equal(y_true, -1.0)
     mask = tf.cast(mask, tf.float32)
-    correct_predictions = tf.equal(tf.round(y_pred), y_true)  # Assuming y_true is 0 or 1
-    masked_correct_predictions = tf.cast(correct_predictions, tf.float32) * mask
-    accuracy = tf.reduce_sum(masked_correct_predictions) / tf.reduce_sum(mask)
+
+    # Calculate the Mean Absolute Error (MAE) only where mask is True
+    absolute_errors = tf.abs(y_pred - y_true)  # Calculate absolute differences
+    masked_absolute_errors = absolute_errors * mask  # Apply mask
+    masked_mae = tf.reduce_sum(masked_absolute_errors) / tf.reduce_sum(mask)
+
+    # Calculate accuracy as 1 - masked MAE
+    accuracy = 1 - masked_mae
     return accuracy
 
 # =======================================================================================================================
