@@ -1,0 +1,48 @@
+Done:
+- evaluated classification vs regression (no retraining) -> slight energy capture improvement
+
+- attempted naiive regression in same way -> no improvement, went into "mean-seeking" (this will be common)
+
+- to deal with this, use an "energy weighted" metric, first attempt was just an relu output through MSE -> did not work well,
+  was fairly unbounded (real energies weren't bounded to anything in actual energy) so had huge variance
+
+- Ended up with fairly "mean-seeking" predictions, so I wanted something where it heavily penalized error in high energy cells in prediction (assumption was that we dont care as much about the low energy cells), so used MeV instead of GeV because MSE is nonlinear and MSE(1000) -> 1,000,000 in error versus mse(10) -> 100
+
+- so then tried to bound it, so that input energy had some meaning to output energy. Basically net would guess a "scale factor" (0 to 1 via sigmoid)
+  then we would take the original measured energy and multiply it by that -> better but not great, when we checked the sigmoids, it ended up that the
+  range was very small, +- 0.05 in ratio, however was noticing qualitatively that the network was learning some patterns. At least scale preservation was forced
+
+- ok, we want to force the network to have an easier time forcing the values to either zero or 1 (since the majority of the time its either zero or 1)
+  while still preserving gradients. Also output energy is unbounded relative to input. so came up with activation function of: f((-inf, 1]) = leaky relu,
+  f((1, inf)) = damped sqrt (unbounded) -> this was actually approaching something reasonable. my speculation is that using linear activation in target region 
+  helps stabilize gradients (gradient falls dramatically as we approach either target value).
+  
+- What really got it working was increasing the network size greatly (factor of roughly 6-10) and dropping the learning rate greatly. This, qualitatively, ended up showing the network clearly learning the task by observation, now it was just the matter of performance
+  This was better, This performed pretty well on medium - high energy samples (~10GeV total measured) and would have some reasonable error percentages (mostly ~30% to ~50%, some going as low as 9% error)
+  Problem with evaluation metric [ 100*abs(sum(prediction) - sum(true))/true ] was that for events that had little to no true energy (ie 0 - 500 MeV total), if the network guessed a relatively small amount of energy (ie ~2GeV), the %error would explode to 2000+% (or more).
+  This was compounded by the network typically struggling to supress "near-zero" energy predictions. when in truth the cell would have zero truth energy from the particle, it has measured ~15 - ~50 MeV and among hundreds of cells, this energy adds up quickly
+
+
+- Wanted to deal with this, so designed a combined loss function, where for any cell with a label of "zero", we treat it like a classification and add a weighted BCE loss, so the task becomes:
+    - For all cells use MSE loss
+    - For cells for which there are ZERO true energy, use BCE loss
+    Didn't end up helping very much, still had same issues even after normalizing the range of MSE and BCE errors dynamically.
+
+- Eventually went back to the problem and figured out how to use a true "energy-scaling" so we can predict BCE loss "classification" WITH an energy (squared) weighting) -> similar problem to before, too few energetic cells and too many "zeros" ended up with model underfitting and spitting out "mean" value (again speculation is due to the model not being strucutred well to capture this problem, along with sigmoid gradients slowing where they should be higher)
+    (this performed worse than the previous pure energy bypass MSE attempts)
+
+- Eventually, spoke to some colleagues (Wojtek and Javier) about a similar project they were working on and what problems they faced. Their recommendation lead to splitting the network into single spine, with 2 heads,
+  One for regressing (ReLu + MSE) the true target cell energy, and another that is a classification mask of "cell hit" vs "cell not hit". These would be trained separately via one loss function, with their outputs combined during prediction and evaluation
+  loss scale issues prevented finding a good balance between classification and regression loss. (ie energy MSE was ~27,000 MeV^2 while BCE loss was typically at most in ~5 range, although technically unbounded)
+
+- So needed to think of some way to normalize scale of energy to roughly the same range. Nature of problem deemed that logarithm seemed a reasonable choice, (range of 10^0 at minimum with 10^5 maximum, so 0 to 5 output range, similar to BCE)
+
+- THEN USED 99% cell size or w/e
+
+- future recommendations = move to true energy as input vs measured so that we can use weighted accuracy metric and its always bounded 0 to 100% (so we can bound our per-cell % error from 0 to 100%)
+- figure out a way to handle "mean-seeking" behaviour. (My recommendation is to use a cost function that normalizes the "hit" number of cells in that part vs "unhit" normalized part so the "hit" and "unhit" groups have roughly the same weight)
+
+
+- Final Insights: this problem is screaming for a standardized evaluation metric (since losses can change and both absolute and % error have their own issues) -> want to switch to "true" total cell energy and use energy-weighted percentage error (which also gives how much total vs missed energy)
+- Having the bypass energy weighting helped keep the range right
+- 

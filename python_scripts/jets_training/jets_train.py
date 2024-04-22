@@ -9,7 +9,7 @@ import os
 import glob
 import sys
 import time
-from models.JetPointNet import PointNetSegmentation, masked_weighted_bce_loss, masked_weighted_bce_loss_wrapper, masked_accuracy
+from models.JetPointNet import PointNetSegmentation, masked_accuracy,  mse_and_bce_loss_wrapper
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "3" # SET GPU
 
@@ -60,18 +60,24 @@ def data_generator(data_dir, batch_size):
         for npz_file in npz_files:
             feats, frac_labels, tot_labels, tot_truth_e = load_data_from_npz(npz_file)
 
-            #Think of a better way to handle the different label types
-            # labels = tot_labels # predicting the absolute truth energy from focused particle
-            labels = frac_labels # predicting the fraction of truth energy from focused particle (absolute / total)
-
-
+            # Compute the dataset size based on the features shape
             dataset_size = feats.shape[0]
+            
+            # Loop through the dataset to generate batches
             for i in range(0, dataset_size, batch_size):
                 end_index = i + batch_size
                 # Ensure we don't exceed the number of samples by slicing till the end
                 batch_feats = feats[i:end_index]
-                batch_labels = labels[i:end_index]
-                yield batch_feats, batch_labels.reshape(*batch_labels.shape, 1)  # Reshape labels to (batch_size, 859, 1)
+                batch_tot_labels = tot_labels[i:end_index]
+                batch_frac_labels = frac_labels[i:end_index]
+
+                # Reshape labels for consistency, if necessary
+                batch_tot_labels = batch_tot_labels.reshape(*batch_tot_labels.shape, 1)
+                batch_frac_labels = batch_frac_labels.reshape(*batch_frac_labels.shape, 1)
+
+                # Yield both total and fractional labels in one tuple
+                yield batch_feats, [batch_tot_labels, batch_frac_labels]
+
 
 def calculate_steps(data_dir, batch_size):
     total_samples = 0
@@ -91,7 +97,7 @@ def scheduler(epoch, lr):
     else:
         return lr
 
-initial_learning_rate = 1e-8
+initial_learning_rate = 1e-6
 BATCH_SIZE = 48
 EPOCHS = 120
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
@@ -106,7 +112,7 @@ val_generator = data_generator(VAL_DIR, BATCH_SIZE)
 model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1)
 
 optimizer = tf.keras.optimizers.Adam(learning_rate=initial_learning_rate)
-model.compile(optimizer=optimizer, loss=masked_weighted_bce_loss_wrapper, metrics={'segmentation_output': masked_accuracy})
+model.compile(optimizer=optimizer, loss= mse_and_bce_loss_wrapper, metrics={'segmentation_output': masked_accuracy})
 
 model.summary()
 model_params = model.count_params()
