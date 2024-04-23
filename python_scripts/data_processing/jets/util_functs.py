@@ -137,7 +137,7 @@ def build_input_array(tracks_sample_array, max_sample_length, energy_scale = 1):
                 track_points.append([intersection['X'], intersection['Y'], intersection['Z'], 0, track['trackPt'], 1])
 
             for cell in track['associated_cells']:
-                track_points.append([cell['X'], cell['Y'], cell['Z'], cell['distance_to_track'], cell['E']*energy_scale, 0])
+                track_points.append([cell['X'], cell['Y'], cell['Z'], cell['distance_to_track'], cell['Total_Truth_Energy']*energy_scale, 0]) #Using total truth energy rather than measured to guess fraction
 
             for associated_track in track['associated_tracks']:
                 for intersection in associated_track['track_layer_intersections']:
