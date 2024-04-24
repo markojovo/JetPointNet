@@ -45,7 +45,7 @@ train_steps = calculate_steps(TRAIN_DIR, BATCH_SIZE)
 val_steps = calculate_steps(VAL_DIR, BATCH_SIZE)
 
 model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1)
-optimizer = tf.keras.optimizers.Adam(learning_rate=(0.005))
+optimizer = tf.keras.optimizers.Adam(learning_rate=(0.001))
 
 @tf.function
 def train_step(x, y, model, optimizer):

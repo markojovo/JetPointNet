@@ -9,11 +9,14 @@ from models.JetPointNet import PointNetSegmentation, masked_weighted_bce_loss, m
 os.environ['CUDA_VISIBLE_DEVICES'] = "3"  # Set GPU
 
 MAX_SAMPLE_LENGTH = 278
-BATCH_SIZE = 480
+BATCH_SIZE = 240
 EPOCHS = 8
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
 VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'
-LEARNING_RATES = [10**(-1 + i) for i in range(10)]  # Log-uniform range from 0.001 to 0.1
+LEARNING_RATES = [10**(-2 - i) for i in range(10)]  # Log-uniform range from 0.001 to 0.1
+
+lrs = []
+losses = []
 
 def load_data_from_npz(npz_file):
     data = np.load(npz_file)
@@ -45,7 +48,7 @@ def calculate_steps(data_dir, batch_size):
 train_steps = calculate_steps(TRAIN_DIR, BATCH_SIZE)
 val_steps = calculate_steps(VAL_DIR, BATCH_SIZE)
 
-@tf.function
+#@tf.function
 def train_step(x, y, model, optimizer):
     with tf.GradientTape() as tape:
         predictions = model(x, training=True)
@@ -56,7 +59,7 @@ def train_step(x, y, model, optimizer):
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
     return loss, reg_acc, weighted_acc
 
-@tf.function
+#@tf.function
 def val_step(x, y, model):
     predictions = model(x, training=False)
     v_loss = masked_weighted_bce_loss(y, predictions[0], predictions[1])
@@ -65,6 +68,7 @@ def val_step(x, y, model):
     return v_loss, reg_acc, weighted_acc
 
 for lr in LEARNING_RATES:
+    tf.keras.backend.clear_session()  # Clear previous models from memory.
     model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1)
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
     train_loss_tracker = tf.metrics.Mean(name='train_loss')
@@ -102,7 +106,13 @@ for lr in LEARNING_RATES:
             val_weighted_acc.update_state(val_weighted_acc_value)
 
         print(f"Training Loss: {train_loss_tracker.result():.4e}, Validation Loss: {val_loss_tracker.result():.4e}, Time: {time.time() - start_time:.2f} sec")
-        #model.save(f"saved_model/PointNetModel_LR{lr:.4e}.keras")
-        #print("Model saved.")
-
+    lrs.append(lr)
+    losses.append(val_loss_tracker.result())
     print("Training completed for LR:", lr)
+
+print(lrs)
+print(losses)
+
+min_idx = losses.index(min(losses))
+
+print("Best LR: ", lrs[min_idx], " with val loss: ",losses[min_idx])
