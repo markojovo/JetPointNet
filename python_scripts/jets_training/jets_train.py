@@ -8,8 +8,8 @@ from models.JetPointNet import PointNetSegmentation, masked_weighted_bce_loss, m
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "3"  # Set GPU
 
-MAX_SAMPLE_LENGTH = 859
-BATCH_SIZE = 20
+MAX_SAMPLE_LENGTH = 278
+BATCH_SIZE = 480
 EPOCHS = 120
 TRAIN_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/train'
 VAL_DIR = '/data/mjovanovic/jets/processed_files/2000_events_w_fixed_hits/SavedNpz/val'
@@ -45,7 +45,7 @@ train_steps = calculate_steps(TRAIN_DIR, BATCH_SIZE)
 val_steps = calculate_steps(VAL_DIR, BATCH_SIZE)
 
 model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1)
-optimizer = tf.keras.optimizers.Adam(learning_rate=(0.0001 / 1000000))
+optimizer = tf.keras.optimizers.Adam(learning_rate=(0.005))
 
 @tf.function
 def train_step(x, y, model, optimizer):

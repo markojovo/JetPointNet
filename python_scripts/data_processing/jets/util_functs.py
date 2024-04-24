@@ -15,12 +15,11 @@ def calculate_cartesian_coordinates(eta, phi, rPerp):
 
     return X, Y, Z
 
-# Define the function to convert eta and phi to cartesian coordinates
 def eta_phi_to_cartesian(eta, phi, R=1):
-    theta = 2 * np.arctan(np.exp(-eta))
+    #theta = 2 * np.arctan(np.exp(-eta))
     x = R * np.cos(phi)
     y = R * np.sin(phi)
-    z = R / np.tan(theta)
+    z = R * np.sinh(eta)  # Corrected to use sinh
     return x, y, z
 
 # Define the function to calculate the intersection with a fixed R layer
@@ -128,20 +127,53 @@ def build_input_array(tracks_sample_array, max_sample_length, energy_scale = 1):
 
     for event in tracks_sample_array:
         for track in event:
-            if len(track['associated_cells']) < 100:
+            if len(track['associated_cells']) < 25:
                 continue
 
             track_points = []
 
+            # Gather all track, cell, and associated track points to find min and max values for normalization
+            all_points = []
+            distances = []
             for intersection in track['track_layer_intersections']:
-                track_points.append([intersection['X'], intersection['Y'], intersection['Z'], 0, track['trackPt'], 1])
-
+                all_points.append((intersection['X'], intersection['Y'], intersection['Z']))
             for cell in track['associated_cells']:
-                track_points.append([cell['X'], cell['Y'], cell['Z'], cell['distance_to_track'], cell['Total_Truth_Energy']*energy_scale, 0]) #Using total truth energy rather than measured to guess fraction
-
+                all_points.append((cell['X'], cell['Y'], cell['Z']))
+                distances.append(cell['distance_to_track'])
             for associated_track in track['associated_tracks']:
                 for intersection in associated_track['track_layer_intersections']:
-                    track_points.append([intersection['X'], intersection['Y'], intersection['Z'], intersection['distance_to_track'], associated_track['trackPt'], 2])
+                    all_points.append((intersection['X'], intersection['Y'], intersection['Z']))
+                    distances.append(intersection['distance_to_track'])
+
+            # Calculate min and max for normalization
+            min_x, min_y, min_z = np.min(all_points, axis=0)
+            max_x, max_y, max_z = np.max(all_points, axis=0)
+            max_distance = max(distances) 
+
+            range_x, range_y, range_z = max_x - min_x, max_y - min_y, max_z - min_z
+
+            # Normalize and add points
+            for intersection in track['track_layer_intersections']:
+                normalized_x = (intersection['X'] - min_x) / range_x
+                normalized_y = (intersection['Y'] - min_y) / range_y
+                normalized_z = (intersection['Z'] - min_z) / range_z
+                track_points.append([normalized_x, normalized_y, normalized_z, 0, track['trackPt'], 1, 0, 0, 0])
+
+            for cell in track['associated_cells']:
+                normalized_x = (cell['X'] - min_x) / range_x
+                normalized_y = (cell['Y'] - min_y) / range_y
+                normalized_z = (cell['Z'] - min_z) / range_z
+                normalized_distance = cell['distance_to_track'] / max_distance
+                track_points.append([normalized_x, normalized_y, normalized_z, normalized_distance, cell['E']*energy_scale, 0, 1, 0, 0])
+
+            for track_idx, associated_track in enumerate(track['associated_tracks']):
+                for intersection in associated_track['track_layer_intersections']:
+                    normalized_x = (intersection['X'] - min_x) / range_x
+                    normalized_y = (intersection['Y'] - min_y) / range_y
+                    normalized_z = (intersection['Z'] - min_z) / range_z
+                    normalized_distance = intersection['distance_to_track'] / max_distance
+                    track_points.append([normalized_x, normalized_y, normalized_z, normalized_distance, associated_track['trackPt'], 0, 0, track_idx, 0])
+
 
             # Now, the sample is truncated to max_sample_length before padding is considered
             track_points = track_points[:max_sample_length]
@@ -149,7 +181,7 @@ def build_input_array(tracks_sample_array, max_sample_length, energy_scale = 1):
             # Pad with zeros and -1 for class identity if needed
             num_points = len(track_points)
             if num_points < max_sample_length:
-                padding = [[0, 0, 0, 0, 0, -1] for _ in range(max_sample_length - num_points)]
+                padding = [[0, 0, 0, 0, 0, 0, 0, 0, 1] for _ in range(max_sample_length - num_points)] #empty type
                 track_points.extend(padding)
 
             samples.append(track_points)
@@ -168,7 +200,7 @@ def build_labels_array(tracks_sample_array, max_sample_length, label_string, lab
 
     for event in tracks_sample_array:
         for track in event:
-            if len(track['associated_cells']) < 100:
+            if len(track['associated_cells']) < 25:
                 continue
 
             label_array = np.full(max_sample_length, -1, dtype=np.float32)
