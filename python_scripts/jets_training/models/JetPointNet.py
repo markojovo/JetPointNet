@@ -142,8 +142,8 @@ def PointNetSegmentation(num_points, num_classes):
         y (mm),
         z (mm),
         minimum_of_distance_to_focused_track (mm),
-        energy (MeV),
-        type (focused track, cells, associated track, unused)
+        energy (GeV),
+        type (focused track, cells, associated track, masked out)
     
     Note that in awk_to_npz.py, if add_tracks_as_labels == False then the labels for the tracks is "-1" (to be masked of the loss and not predicted on)
 
