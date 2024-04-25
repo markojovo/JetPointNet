@@ -160,7 +160,7 @@ def PointNetSegmentation(num_points, num_classes):
     # Apply mask
     input_points_masked = tf.keras.layers.Multiply()([input_points, masks])
 
-    energy = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x[:, :, 4], -1), name='e')(input_points_masked)
+    #energy = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x[:, :, 4], -1), name='e')(input_points_masked)
 
     # T-Net for input transformation
     input_tnet = TNet(input_points_masked, num_features)  # Assuming TNet is properly defined elsewhere
@@ -190,7 +190,7 @@ def PointNetSegmentation(num_points, num_classes):
 
     segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation='linear', name='SEG')(c)
 
-    model = tf.keras.Model(inputs=input_points, outputs=[segmentation_output, energy])
+    model = tf.keras.Model(inputs=input_points, outputs=segmentation_output)
 
     return model
 # =======================================================================================================================

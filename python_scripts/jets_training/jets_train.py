@@ -18,20 +18,22 @@ def load_data_from_npz(npz_file):
     data = np.load(npz_file)
     feats = data['feats']
     frac_labels = data['frac_labels']
-    return feats, frac_labels
+    energy_weights = data['tot_truth_e']
+    return feats, frac_labels, energy_weights
 
 def data_generator(data_dir, batch_size):
     npz_files = glob.glob(os.path.join(data_dir, '*.npz'))
     while True:
         np.random.shuffle(npz_files)
         for npz_file in npz_files:
-            feats, frac_labels = load_data_from_npz(npz_file)
+            feats, frac_labels, e_weights = load_data_from_npz(npz_file)
             dataset_size = feats.shape[0]
             for i in range(0, dataset_size, batch_size):
                 end_index = i + batch_size
                 batch_feats = feats[i:end_index]
                 batch_labels = frac_labels[i:end_index]
-                yield batch_feats, batch_labels.reshape(*batch_labels.shape, 1)
+                batch_e_weights = e_weights[i:end_index]
+                yield batch_feats, batch_labels.reshape(*batch_labels.shape, 1), batch_e_weights.reshape(*batch_e_weights.shape, 1)
 
 def calculate_steps(data_dir, batch_size):
     total_samples = 0
@@ -48,22 +50,22 @@ model = PointNetSegmentation(MAX_SAMPLE_LENGTH, 1)
 optimizer = tf.keras.optimizers.Adam(learning_rate=(0.001))
 
 @tf.function
-def train_step(x, y, model, optimizer):
+def train_step(x, y, energy_weights, model, optimizer):
     with tf.GradientTape() as tape:
         predictions = model(x, training=True)
-        loss = masked_weighted_bce_loss(y, predictions[0], predictions[1])
-        reg_acc = masked_regular_accuracy(y, predictions[0], predictions[1])
-        weighted_acc = masked_weighted_accuracy(y, predictions[0], predictions[1])
+        loss = masked_weighted_bce_loss(y, predictions, energy_weights)
+        reg_acc = masked_regular_accuracy(y, predictions, energy_weights)
+        weighted_acc = masked_weighted_accuracy(y, predictions, energy_weights)
     grads = tape.gradient(loss, model.trainable_variables)
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
     return loss, reg_acc, weighted_acc
 
 @tf.function
-def val_step(x, y, model):
+def val_step(x, y, energy_weights, model):
     predictions = model(x, training=False)
-    v_loss = masked_weighted_bce_loss(y, predictions[0], predictions[1])
-    reg_acc = masked_regular_accuracy(y, predictions[0], predictions[1])
-    weighted_acc = masked_weighted_accuracy(y, predictions[0], predictions[1])
+    v_loss = masked_weighted_bce_loss(y, predictions, energy_weights)
+    reg_acc = masked_regular_accuracy(y, predictions, energy_weights)
+    weighted_acc = masked_weighted_accuracy(y, predictions, energy_weights)
     return v_loss, reg_acc, weighted_acc
 
 train_loss_tracker = tf.metrics.Mean(name='train_loss')
@@ -85,10 +87,10 @@ for epoch in range(EPOCHS):
     val_weighted_acc.reset_states()
 
 
-    for step, (x_batch_train, y_batch_train) in enumerate(data_generator(TRAIN_DIR, BATCH_SIZE)):
+    for step, (x_batch_train, y_batch_train, e_weight_train) in enumerate(data_generator(TRAIN_DIR, BATCH_SIZE)):
         if step >= train_steps:
             break
-        loss_value, reg_acc_value, weighted_acc_value = train_step(x_batch_train, y_batch_train, model, optimizer)
+        loss_value, reg_acc_value, weighted_acc_value = train_step(x_batch_train, y_batch_train, e_weight_train, model, optimizer)
         train_loss_tracker.update_state(loss_value)
         train_reg_acc.update_state(reg_acc_value)
         train_weighted_acc.update_state(weighted_acc_value)
@@ -97,10 +99,10 @@ for epoch in range(EPOCHS):
     print(f"\nTraining loss over epoch: {train_loss_tracker.result():.4f}")
     print(f"Time taken for training: {time.time() - start_time:.2f} sec")
 
-    for step, (x_batch_val, y_batch_val) in enumerate(data_generator(VAL_DIR, BATCH_SIZE)):
+    for step, (x_batch_val, y_batch_val, e_weight_val) in enumerate(data_generator(VAL_DIR, BATCH_SIZE)):
         if step >= val_steps:
             break
-        val_loss_value, val_reg_acc_value, val_weighted_acc_value = val_step(x_batch_val, y_batch_val, model)
+        val_loss_value, val_reg_acc_value, val_weighted_acc_value = val_step(x_batch_val, y_batch_val, e_weight_train, model)
         val_loss_tracker.update_state(val_loss_value)
         val_reg_acc.update_state(val_reg_acc_value)
         val_weighted_acc.update_state(val_weighted_acc_value)
