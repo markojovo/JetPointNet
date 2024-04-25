@@ -21,7 +21,7 @@ def load_data_from_npz(npz_file):
     energy_weights = data['tot_truth_e']
     return feats, frac_labels, energy_weights
 
-def data_generator(data_dir, batch_size):
+def data_generator(data_dir, batch_size, drop_last=True):
     npz_files = glob.glob(os.path.join(data_dir, '*.npz'))
     while True:
         np.random.shuffle(npz_files)
@@ -30,10 +30,17 @@ def data_generator(data_dir, batch_size):
             dataset_size = feats.shape[0]
             for i in range(0, dataset_size, batch_size):
                 end_index = i + batch_size
+                if end_index > dataset_size:
+                    if drop_last:
+                        continue  # Drop last smaller batch
                 batch_feats = feats[i:end_index]
                 batch_labels = frac_labels[i:end_index]
                 batch_e_weights = e_weights[i:end_index]
-                yield batch_feats, batch_labels.reshape(*batch_labels.shape, 1), batch_e_weights.reshape(*batch_e_weights.shape, 1)
+
+                yield (batch_feats, 
+                       batch_labels.reshape(*batch_labels.shape, 1), 
+                       batch_e_weights.reshape(*batch_e_weights.shape, 1))
+
 
 def calculate_steps(data_dir, batch_size):
     total_samples = 0
