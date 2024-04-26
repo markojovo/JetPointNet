@@ -26,7 +26,7 @@ class CustomMaskingLayer(tf.keras.layers.Layer):
         super(CustomMaskingLayer, self).__init__(**kwargs)
     
     def call(self, inputs):
-        mask = tf.not_equal(inputs[:, :, -1], -1) # Masking
+        mask = tf.not_equal(inputs[:, :, -1], 1) # Masking
         mask = tf.cast(mask, tf.float32)
         mask = tf.expand_dims(mask, -1)
         return inputs * mask
@@ -36,7 +36,7 @@ class CustomMaskingLayer(tf.keras.layers.Layer):
 
 class OrthogonalRegularizer(tf.keras.regularizers.Regularizer):
     # Used in Tnet in PointNet for transforming everything to same space
-    def __init__(self, num_features=6, l2=0.001):
+    def __init__(self, num_features=9, l2=0.001):
         self.num_features = num_features
         self.l2 = l2
         self.I = tf.eye(num_features)
@@ -134,8 +134,7 @@ def TNet(input_tensor, size, add_regularization=False):
 
 
 def PointNetSegmentation(num_points, num_classes):
-    num_features = 6  # Number of input features per point
-    network_size_factor = 5 # Mess around with this along with the different layer sizes 
+    num_features = 9  # Number of input features per point
 
     '''
     Input shape per point is:
@@ -143,8 +142,8 @@ def PointNetSegmentation(num_points, num_classes):
         y (mm),
         z (mm),
         minimum_of_distance_to_focused_track (mm),
-        energy (MeV),
-        type (-1 for masked, 0 for calorimeter cell, 1 for focused track and 2 for other track)]
+        energy (GeV),
+        type (focused track, cells, associated track, masked out)
     
     Note that in awk_to_npz.py, if add_tracks_as_labels == False then the labels for the tracks is "-1" (to be masked of the loss and not predicted on)
 
@@ -152,23 +151,30 @@ def PointNetSegmentation(num_points, num_classes):
 
     input_points = tf.keras.Input(shape=(num_points, num_features))
 
-    # Extract energy from input and multiply by the segmentation output
-    #energy = tf.expand_dims(input_points[:, :, 4], -1)  # Assuming energy is at index 4
-    energy = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x[:, :, 4], -1), name='energy_output')(input_points)
+    # Masking layer to ignore points with the last feature index as -1
+    masks = tf.keras.layers.Lambda(lambda x: tf.not_equal(x[:, :, -1], 1), output_shape=(num_points,))(input_points)
+    masks = tf.keras.layers.Lambda(lambda x: tf.cast(x, tf.float32))(masks)  # Cast boolean to float for multiplication
+    masks = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, -1))(masks)  # Expand dimensions to apply mask
+
+
+    # Apply mask
+    input_points_masked = tf.keras.layers.Multiply()([input_points, masks])
+
+    #energy = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x[:, :, 4], -1), name='e')(input_points_masked)
 
     # T-Net for input transformation
-    input_tnet = TNet(input_points, num_features)
-    x = tf.keras.layers.Dot(axes=(2, 1))([input_points, input_tnet])
-    x = conv_mlp(x, 72)
-    x = conv_mlp(x, 72)
+    input_tnet = TNet(input_points_masked, num_features)  # Assuming TNet is properly defined elsewhere
+    x = tf.keras.layers.Dot(axes=(2, 1))([input_points_masked, input_tnet])
+    x = conv_mlp(x, 96)  # Assuming conv_mlp is properly defined elsewhere
+    x = conv_mlp(x, 96 )
     point_features = x
 
     # T-Net for feature transformation
-    feature_tnet = TNet(x, 72, add_regularization=True)
+    feature_tnet = TNet(x, 96, add_regularization=True)
     x = tf.keras.layers.Dot(axes=(2, 1))([x, feature_tnet])
-    x = conv_mlp(x, 128 * network_size_factor)
-    x = conv_mlp(x, 256 * network_size_factor)
-    x = conv_mlp(x, 1024 * network_size_factor)
+    x = conv_mlp(x, 128)
+    x = conv_mlp(x, 256)
+    x = conv_mlp(x, 1024)
 
     # Get global features and expand
     global_feature = tf.keras.layers.GlobalMaxPooling1D()(x)
@@ -177,17 +183,16 @@ def PointNetSegmentation(num_points, num_classes):
 
     # Concatenate point features with global features
     c = tf.keras.layers.Concatenate()([point_features, global_feature_expanded])
-    c = conv_mlp(c, 512, apply_attention=True)
-    c = conv_mlp(c, 256, apply_attention=True)
+    c = conv_mlp(c, 512, apply_attention=False)
+    c = conv_mlp(c, 256, apply_attention=False)
 
     c = conv_mlp(c, 128, dropout_rate=0.3)
 
-    segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation='sigmoid', name='segmentation_output')(c)
+    segmentation_output = tf.keras.layers.Conv1D(num_classes, kernel_size=1, activation='linear', name='SEG')(c)
 
-    model = tf.keras.Model(inputs=input_points, outputs=[segmentation_output, energy])
+    model = tf.keras.Model(inputs=input_points, outputs=segmentation_output)
 
     return model
-
 # =======================================================================================================================
 # =======================================================================================================================
 
@@ -195,36 +200,108 @@ def PointNetSegmentation(num_points, num_classes):
 # =======================================================================================================================
 # ============ Losses ===================================================================================================
 
-def masked_weighted_bce_loss_wrapper(y_true, y_pred):
-    return masked_weighted_bce_loss(y_true[0], y_pred[0], y_pred[1])
+def masked_weighted_bce_loss(y_true, y_pred, energies):
 
-def masked_weighted_bce_loss(y_true, y_pred, weights):
-    # Create a mask that identifies valid (non-masked) entries
-    valid_mask = tf.not_equal(y_true, -1.0)
-    valid_mask = tf.cast(valid_mask, tf.float32)
-    valid_mask = tf.squeeze(valid_mask, axis=-1)  # Flatten the mask to match y_true's and y_pred's dimensions
+    #energies = tf.square(energies)
 
-    # Calculate binary cross-entropy loss
-    bce_loss = tf.keras.losses.binary_crossentropy(y_true, y_pred, from_logits=False)
-    bce_loss = bce_loss * valid_mask * weights  # Apply both the valid mask and the weights
+    # Ensure valid_mask and y_true are compatible for operations
+    valid_mask = tf.cast(tf.not_equal(y_true, -1.0), tf.float32)  # This should be [batch, points, 1]
 
-    # Calculate the sum of valid weights or use a fixed minimum value, whichever is larger
-    normalization_factor = tf.reduce_sum(valid_mask * weights, axis=1)
-    normalization_factor = tf.maximum(normalization_factor, 100)  # Ensure the normalization factor is at least 100
+    # Adjust y_true based on the threshold, maintain dimensions as [batch, points, 1]
+    y_true_adjusted = tf.cast(tf.greater_equal(y_true, 0.5), tf.float32) * valid_mask
 
-    # Normalize each sample's loss by the determined factor
-    sample_normalized_bce_loss = tf.reduce_sum(bce_loss, axis=1) / normalization_factor
+    # Calculate binary cross-entropy loss, ensuring to keep the dimensions consistent
 
-    # Take the mean across the batch for a single loss value
-    return tf.reduce_mean(sample_normalized_bce_loss)
+    y_pred_masked = y_pred * valid_mask
+    bce_loss = tf.keras.losses.binary_crossentropy(y_true_adjusted, y_pred_masked, from_logits=True)
+    bce_loss = tf.expand_dims(bce_loss, axis=-1)  # Ensure BCE loss has the same [batch, points, 1] shape as others
 
-def masked_accuracy(y_true, y_pred):
+    # Weighted binary cross-entropy loss, ensuring all dimensions match
+    energies_times_mask = energies * valid_mask
+    weighted_bce_loss = bce_loss * energies_times_mask
+
+    # Normalize the weighted BCE loss
+    total_energy_weight = tf.reduce_sum(energies * valid_mask, axis=1, keepdims=True)  # Keep dimensions with 'keepdims'
+    total_num_points = tf.reduce_sum(valid_mask, axis=1, keepdims=True)  # Keep dimensions with 'keepdims'
+    normalized_bce_loss = weighted_bce_loss / (total_num_points + 1) / (total_energy_weight + 1) 
+
+    # Combine the mean losses from both labels
+    return normalized_bce_loss 
+
+
+'''
+def masked_weighted_bce_loss(y_true, y_pred, energies):
+    energies = tf.square(energies)
+
+    # Ensure valid_mask and y_true are compatible for operations
+    valid_mask = tf.cast(tf.not_equal(y_true, -1.0), tf.float32)  # This should be [batch, points, 1]
+
+    # Adjust y_true based on the threshold, maintain dimensions as [batch, points, 1]
+    y_true_adjusted = tf.cast(tf.greater_equal(y_true, 0.5), tf.float32) * valid_mask
+
+    # Calculate binary cross-entropy loss, ensuring to keep the dimensions consistent
+    bce_loss = tf.keras.losses.binary_crossentropy(y_true_adjusted, y_pred, from_logits=True)
+    bce_loss = tf.expand_dims(bce_loss, axis=-1)  # Ensure BCE loss has the same [batch, points, 1] shape as others
+
+    # Weighted binary cross-entropy loss, ensuring all dimensions match
+    weighted_bce_loss = bce_loss * energies * valid_mask
+
+    # Normalize the weighted BCE loss
+    total_energy_weight = tf.reduce_sum(energies * valid_mask, axis=1, keepdims=True)  # Keep dimensions with 'keepdims'
+    normalized_bce_loss = weighted_bce_loss / (total_energy_weight + 1e-5)
+
+    # Create masks for 'zero' and 'one' labels, apply to normalized loss, and compute means
+    mask_zeros = tf.cast(tf.equal(y_true_adjusted, 0.0), tf.float32)
+    mask_ones = tf.cast(tf.equal(y_true_adjusted, 1.0), tf.float32)
+    mean_normalized_bce_loss_zeros = tf.reduce_sum(normalized_bce_loss * mask_zeros) / (tf.reduce_sum(mask_zeros) + 1 )
+    mean_normalized_bce_loss_ones = tf.reduce_sum(normalized_bce_loss * mask_ones) / (tf.reduce_sum(mask_ones) + 1 )
+
+    # Combine the mean losses from both labels
+    return (mean_normalized_bce_loss_zeros + mean_normalized_bce_loss_ones) / 2
+
+'''
+
+
+
+def masked_regular_accuracy(y_true, y_pred, energies):
     mask = tf.not_equal(y_true, -1.0)
     mask = tf.cast(mask, tf.float32)
-    correct_predictions = tf.equal(tf.round(y_pred), y_true)  # Assuming y_true is 0 or 1
+
+    adjusted_y_true = tf.cast(tf.greater(y_true, 0.5), tf.float32)
+    adjusted_y_pred = tf.cast(tf.greater(y_pred, 0.0), tf.float32)
+    
+    correct_predictions = tf.equal(adjusted_y_pred, adjusted_y_true)
+
     masked_correct_predictions = tf.cast(correct_predictions, tf.float32) * mask
-    accuracy = tf.reduce_sum(masked_correct_predictions) / tf.reduce_sum(mask)
+
+    accuracy = tf.reduce_sum(masked_correct_predictions) / (tf.reduce_sum(mask) + 1e-5)
     return accuracy
+
+
+def masked_weighted_accuracy(y_true, y_pred, energies):
+    #energies = tf.square(energies)
+
+
+    mask = tf.not_equal(y_true, -1.0)
+    mask = tf.cast(mask, tf.float32)
+
+    adjusted_y_true = tf.cast(tf.greater(y_true, 0.5), tf.float32)
+    adjusted_y_pred = tf.cast(tf.greater(y_pred, 0.0), tf.float32)
+    
+    correct_predictions = tf.equal(adjusted_y_pred, adjusted_y_true)
+
+    masked_correct_predictions = tf.cast(correct_predictions, tf.float32) * mask
+
+    weighted_correct_predictions = masked_correct_predictions * energies
+    sum_weights = tf.reduce_sum(energies * mask, axis=1)
+    normalized_accuracy = tf.reduce_sum(weighted_correct_predictions, axis=1) / (sum_weights + 1e-5)  
+
+
+    return normalized_accuracy
+
+
+
+
 
 # =======================================================================================================================
 # =======================================================================================================================

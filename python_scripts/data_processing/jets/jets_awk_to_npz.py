@@ -34,7 +34,7 @@ def find_global_max_sample_length():
     return global_max_sample_length
 
 find_global_max_sample_length()
-global_max_sample_length = 859 #placeholder for now 
+global_max_sample_length = 278 #placeholder for now 
 
 
 for data_folder in DATA_FOLDERS:
@@ -54,10 +54,10 @@ for data_folder in DATA_FOLDERS:
         ak_array = read_parquet(os.path.join(data_folder_path, chunk_file_name))
 
         frac_labels = build_labels_array(ak_array, global_max_sample_length, "Fraction_Label")
-        tot_labels = build_labels_array(ak_array, global_max_sample_length, "Total_Label", label_scale = 1000)
-        tot_truth_e = build_labels_array(ak_array, global_max_sample_length, "Total_Truth_Energy", label_scale = 1000)
+        tot_labels = build_labels_array(ak_array, global_max_sample_length, "Total_Label", label_scale = 1)
+        tot_truth_e = build_labels_array(ak_array, global_max_sample_length, "Total_Truth_Energy", label_scale = 1)
 
-        feats = build_input_array(ak_array, global_max_sample_length, energy_scale = 1000)
+        feats = build_input_array(ak_array, global_max_sample_length, energy_scale = 1)
 
         # Save the feats and labels arrays to an NPZ file for each chunk
         npz_save_path = os.path.join(npz_data_folder_path, f'chunk_{i}_{data_folder}.npz')

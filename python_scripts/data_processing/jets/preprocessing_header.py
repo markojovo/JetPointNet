@@ -8,14 +8,14 @@ NUM_EVENTS_PER_CHUNK = 250
 TRAIN_SPLIT_RATIO = 0.8
 VAL_SPLIT_RATIO = 0.1
 # TEST_SPLIT_RATIO is implied to be the remaining percentage
-NUM_THREAD_PER_CHUNK = 16 # For root_to_awk processing
+NUM_THREAD_PER_CHUNK = 32 # For root_to_awk processing
 OUTPUT_DIRECTORY_NAME = "2000_events_w_fixed_hits/"
 # ============================
 
 
 DEBUG_NUM_EVENTS_TO_USE = None
 UPROOT_MASK_VALUE_THRESHOLD = -100000
-MAX_DISTANCE = 0.2
+MAX_DISTANCE = 0.1
 
 # Path to the ROOT file containing jet events
 #FILE_LOC = "/data/atlas/mltree_1000.root"
